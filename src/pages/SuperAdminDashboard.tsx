@@ -3,12 +3,13 @@ import { motion } from "framer-motion";
 import {
   Shield, Building2, Users, BarChart3, MessageSquare, AlertTriangle,
   CreditCard, TrendingUp, Activity, Search, MoreHorizontal, Eye,
-  Ban, CheckCircle2, Loader2, Globe
+  Ban, CheckCircle2, Loader2, Globe, UserCog, ChevronDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -68,6 +69,17 @@ function StatCard({ icon: Icon, label, value, change, color }: { icon: any; labe
   );
 }
 
+const ROLES = ["super_admin", "institution_admin", "alumni", "student", "moderator"] as const;
+
+interface UserWithRole {
+  user_id: string;
+  full_name: string;
+  email?: string;
+  company: string | null;
+  role: string;
+  role_id: string | null;
+}
+
 export default function SuperAdminDashboard() {
   const { user } = useAuth();
   const [institutions, setInstitutions] = useState<Institution[]>([]);
@@ -75,6 +87,9 @@ export default function SuperAdminDashboard() {
   const [search, setSearch] = useState("");
   const [flaggedPosts, setFlaggedPosts] = useState(mockFlaggedPosts);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [usersWithRoles, setUsersWithRoles] = useState<UserWithRole[]>([]);
+  const [roleSearch, setRoleSearch] = useState("");
+  const [roleLoading, setRoleLoading] = useState(false);
 
   // Check role
   useEffect(() => {
@@ -100,6 +115,38 @@ export default function SuperAdminDashboard() {
     })();
   }, [isAdmin]);
 
+  // Fetch users with roles
+  const fetchUsersWithRoles = async () => {
+    setRoleLoading(true);
+    const { data: profiles } = await supabase.from("profiles").select("user_id, full_name, company").order("full_name");
+    const { data: roles } = await supabase.from("user_roles").select("id, user_id, role");
+    if (profiles && roles) {
+      const merged: UserWithRole[] = profiles.map((p) => {
+        const r = roles.find((r) => r.user_id === p.user_id);
+        return { user_id: p.user_id, full_name: p.full_name, company: p.company, role: r?.role || "alumni", role_id: r?.id || null };
+      });
+      setUsersWithRoles(merged);
+    }
+    setRoleLoading(false);
+  };
+
+  useEffect(() => { if (isAdmin) fetchUsersWithRoles(); }, [isAdmin]);
+
+  const updateUserRole = async (targetUserId: string, newRole: string, existingRoleId: string | null) => {
+    if (targetUserId === user?.id) { toast.error("Cannot change your own role"); return; }
+    try {
+      if (existingRoleId) {
+        await supabase.from("user_roles").update({ role: newRole as any }).eq("id", existingRoleId);
+      } else {
+        await supabase.from("user_roles").insert({ user_id: targetUserId, role: newRole as any });
+      }
+      setUsersWithRoles((prev) => prev.map((u) => u.user_id === targetUserId ? { ...u, role: newRole } : u));
+      toast.success(`Role updated to ${newRole}`);
+    } catch {
+      toast.error("Failed to update role");
+    }
+  };
+
   if (isAdmin === null) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-accent" /></div>;
 
   if (!isAdmin) return (
@@ -124,6 +171,11 @@ export default function SuperAdminDashboard() {
     i.name.toLowerCase().includes(search.toLowerCase())
   );
 
+  const filteredUsers = usersWithRoles.filter((u) =>
+    u.full_name.toLowerCase().includes(roleSearch.toLowerCase()) ||
+    u.role.toLowerCase().includes(roleSearch.toLowerCase())
+  );
+
   return (
     <div className="space-y-6">
       <div>
@@ -143,8 +195,9 @@ export default function SuperAdminDashboard() {
 
       <Tabs defaultValue="tenants" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="tenants">Tenant Management</TabsTrigger>
-          <TabsTrigger value="analytics">Platform Analytics</TabsTrigger>
+          <TabsTrigger value="tenants">Tenants</TabsTrigger>
+          <TabsTrigger value="roles">User Roles</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="moderation">Moderation</TabsTrigger>
           <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
         </TabsList>
@@ -192,6 +245,56 @@ export default function SuperAdminDashboard() {
                     <Button variant="ghost" size="icon" className="h-8 w-8"><Eye className="h-4 w-4 text-muted-foreground" /></Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4 text-muted-foreground" /></Button>
                   </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* User Roles */}
+        <TabsContent value="roles" className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-2 flex-1 max-w-sm">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <input value={roleSearch} onChange={(e) => setRoleSearch(e.target.value)} placeholder="Search users..." className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-full" />
+            </div>
+            <Badge variant="outline" className="text-xs">{usersWithRoles.length} users</Badge>
+          </div>
+
+          {roleLoading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-accent" /></div>
+          ) : (
+            <div className="space-y-2">
+              {filteredUsers.map((u, i) => (
+                <motion.div
+                  key={u.user_id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.02 }}
+                  className="bg-card border border-border rounded-xl p-4 shadow-card flex items-center gap-4"
+                >
+                  <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                    <UserCog className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-heading font-semibold text-card-foreground">{u.full_name || "Unnamed User"}</p>
+                    <p className="text-xs text-muted-foreground">{u.company || "No company"}</p>
+                  </div>
+                  <Select
+                    value={u.role}
+                    onValueChange={(val) => updateUserRole(u.user_id, val, u.role_id)}
+                    disabled={u.user_id === user?.id}
+                  >
+                    <SelectTrigger className="w-44 h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ROLES.map((r) => (
+                        <SelectItem key={r} value={r} className="text-xs">{r.replace(/_/g, " ")}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {u.user_id === user?.id && <Badge variant="outline" className="text-[10px]">You</Badge>}
                 </motion.div>
               ))}
             </div>

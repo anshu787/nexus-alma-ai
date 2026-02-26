@@ -4,13 +4,14 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, MessageSquare, Calendar, Briefcase, Brain,
   BarChart3, Settings, Sparkles, ChevronLeft, Bell, Search, LogOut,
-  Target, Trophy, Share2, User, Send, Palette, Shield, Check, X
+  Target, Trophy, Share2, User, Send, Palette, Shield, Check, X, BellRing
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useBrowserNotifications } from "@/hooks/useBrowserNotifications";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -67,6 +68,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { requestPermission, supported: notifSupported } = useBrowserNotifications();
+
+  // Prompt for browser notification permission on first load
+  useEffect(() => {
+    if (notifSupported && Notification.permission === "default") {
+      // Delay slightly so it doesn't feel intrusive
+      const t = setTimeout(() => requestPermission(), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [notifSupported]);
 
   // Fetch notifications
   useEffect(() => {
