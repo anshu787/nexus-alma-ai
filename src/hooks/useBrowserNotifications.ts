@@ -1,11 +1,17 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+
+interface NotifPrefs {
+  desktop_enabled: boolean;
+  [key: string]: boolean;
+}
 
 export function useBrowserNotifications() {
   const { user } = useAuth();
   const permissionRef = useRef<NotificationPermission>("default");
   const swRef = useRef<ServiceWorkerRegistration | null>(null);
+  const prefsRef = useRef<NotifPrefs | null>(null);
 
   // Register service worker on mount
   useEffect(() => {
@@ -18,7 +24,6 @@ export function useBrowserNotifications() {
         .then((reg) => { swRef.current = reg; })
         .catch((err) => console.warn("SW registration failed:", err));
 
-      // Handle notification click navigation
       navigator.serviceWorker.addEventListener("message", (event) => {
         if (event.data?.type === "NOTIFICATION_CLICK" && event.data.url) {
           window.location.href = event.data.url;
@@ -26,6 +31,15 @@ export function useBrowserNotifications() {
       });
     }
   }, []);
+
+  // Load preferences
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("notification_preferences").select("*").eq("user_id", user.id).single()
+      .then(({ data }) => {
+        if (data) prefsRef.current = data as unknown as NotifPrefs;
+      });
+  }, [user]);
 
   const requestPermission = async () => {
     if (!("Notification" in window)) return false;
@@ -52,9 +66,14 @@ export function useBrowserNotifications() {
           if (document.visibilityState === "visible") return;
           if (permissionRef.current !== "granted") return;
 
+          const prefs = prefsRef.current;
+          if (prefs && !prefs.desktop_enabled) return;
+
           const n = payload.new as { title: string; message: string | null; type: string; link: string | null };
 
-          // Use service worker for reliable background notifications
+          // Check type-specific preference
+          if (prefs && n.type in prefs && !prefs[n.type]) return;
+
           if (swRef.current?.active) {
             swRef.current.active.postMessage({
               type: "SHOW_NOTIFICATION",
@@ -65,7 +84,6 @@ export function useBrowserNotifications() {
               link: n.link,
             });
           } else {
-            // Fallback to basic Notification API
             const notif = new Notification(n.title, {
               body: n.message || undefined,
               icon: "/favicon.ico",

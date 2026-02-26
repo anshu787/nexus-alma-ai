@@ -519,6 +519,57 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_preferences: {
+        Row: {
+          ai: boolean
+          campaign: boolean
+          created_at: string
+          desktop_enabled: boolean
+          event: boolean
+          general: boolean
+          id: string
+          mentorship: boolean
+          message: boolean
+          opportunity: boolean
+          reengagement: boolean
+          referral: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai?: boolean
+          campaign?: boolean
+          created_at?: string
+          desktop_enabled?: boolean
+          event?: boolean
+          general?: boolean
+          id?: string
+          mentorship?: boolean
+          message?: boolean
+          opportunity?: boolean
+          reengagement?: boolean
+          referral?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai?: boolean
+          campaign?: boolean
+          created_at?: string
+          desktop_enabled?: boolean
+          event?: boolean
+          general?: boolean
+          id?: string
+          mentorship?: boolean
+          message?: boolean
+          opportunity?: boolean
+          reengagement?: boolean
+          referral?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string

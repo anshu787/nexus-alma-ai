@@ -40,18 +40,22 @@ const defaultProfile: ProfileData = {
   social_links: {}, is_mentor: false, is_hiring: false,
 };
 
-interface NotifPrefs {
-  email_messages: boolean;
-  email_events: boolean;
-  email_opportunities: boolean;
-  push_messages: boolean;
-  push_mentions: boolean;
-  push_events: boolean;
+interface DesktopNotifPrefs {
+  mentorship: boolean;
+  referral: boolean;
+  event: boolean;
+  ai: boolean;
+  message: boolean;
+  campaign: boolean;
+  opportunity: boolean;
+  reengagement: boolean;
+  general: boolean;
+  desktop_enabled: boolean;
 }
 
-const defaultNotifPrefs: NotifPrefs = {
-  email_messages: true, email_events: true, email_opportunities: true,
-  push_messages: true, push_mentions: true, push_events: true,
+const defaultDesktopPrefs: DesktopNotifPrefs = {
+  mentorship: true, referral: true, event: true, ai: true, message: true,
+  campaign: true, opportunity: true, reengagement: false, general: true, desktop_enabled: true,
 };
 
 interface PrivacyPrefs {
@@ -70,7 +74,9 @@ const defaultPrivacyPrefs: PrivacyPrefs = {
 export default function SettingsPage() {
   const { user, signOut } = useAuth();
   const [profile, setProfile] = useState<ProfileData>(defaultProfile);
-  const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(defaultNotifPrefs);
+  const [notifPrefs, setNotifPrefs] = useState<DesktopNotifPrefs>(defaultDesktopPrefs);
+  const [notifPrefsLoaded, setNotifPrefsLoaded] = useState(false);
+  const [savingNotifs, setSavingNotifs] = useState(false);
   const [privacyPrefs, setPrivacyPrefs] = useState<PrivacyPrefs>(defaultPrivacyPrefs);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -105,6 +111,22 @@ export default function SettingsPage() {
         });
         setAvatarUrl(data.avatar_url || null);
       }
+
+      // Load notification preferences
+      const { data: np } = await supabase.from("notification_preferences").select("*").eq("user_id", user.id).single();
+      if (np) {
+        setNotifPrefs({
+          mentorship: np.mentorship, referral: np.referral, event: np.event, ai: np.ai,
+          message: np.message, campaign: np.campaign, opportunity: np.opportunity,
+          reengagement: np.reengagement, general: np.general, desktop_enabled: np.desktop_enabled,
+        });
+        setNotifPrefsLoaded(true);
+      } else {
+        // Insert default row
+        await supabase.from("notification_preferences").insert({ user_id: user.id });
+        setNotifPrefsLoaded(true);
+      }
+
       setLoading(false);
     };
     load();
@@ -353,36 +375,31 @@ export default function SettingsPage() {
         {/* Notifications Tab */}
         <TabsContent value="notifications">
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-xl p-6 shadow-card space-y-6">
-            <div>
-              <h3 className="font-heading font-semibold text-card-foreground mb-1">Email Notifications</h3>
-              <p className="text-xs text-muted-foreground mb-4">Choose what emails you receive</p>
-              <div className="space-y-4">
-                {([
-                  ["email_messages", "Direct Messages", "Get notified when someone sends you a message"],
-                  ["email_events", "Events & Meetups", "Updates about events you've RSVP'd to"],
-                  ["email_opportunities", "Job Opportunities", "New opportunities matching your profile"],
-                ] as const).map(([key, label, desc]) => (
-                  <div key={key} className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-card-foreground">{label}</p>
-                      <p className="text-xs text-muted-foreground">{desc}</p>
-                    </div>
-                    <Switch checked={notifPrefs[key]} onCheckedChange={(v) => setNotifPrefs({ ...notifPrefs, [key]: v })} />
-                  </div>
-                ))}
+            {/* Master Toggle */}
+            <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/50 border border-border">
+              <div>
+                <h3 className="font-heading font-semibold text-card-foreground">Desktop Notifications</h3>
+                <p className="text-xs text-muted-foreground">Receive browser push alerts when the tab is in the background</p>
               </div>
+              <Switch checked={notifPrefs.desktop_enabled} onCheckedChange={(v) => setNotifPrefs({ ...notifPrefs, desktop_enabled: v })} />
             </div>
 
             <Separator />
 
-            <div>
-              <h3 className="font-heading font-semibold text-card-foreground mb-1">Push Notifications</h3>
-              <p className="text-xs text-muted-foreground mb-4">Browser push notification preferences</p>
+            <div className={notifPrefs.desktop_enabled ? "" : "opacity-50 pointer-events-none"}>
+              <h3 className="font-heading font-semibold text-card-foreground mb-1">Alert Types</h3>
+              <p className="text-xs text-muted-foreground mb-4">Choose which notification types trigger desktop alerts</p>
               <div className="space-y-4">
                 {([
-                  ["push_messages", "New Messages", "Instant alerts for incoming messages"],
-                  ["push_mentions", "Mentions & Tags", "When someone mentions you in a post or comment"],
-                  ["push_events", "Event Reminders", "Reminders before events you're attending"],
+                  ["mentorship", "Mentorship", "Mentor matching, requests, and session updates"],
+                  ["referral", "Referrals", "Referral requests and status changes"],
+                  ["event", "Events", "Event invitations, RSVPs, and reminders"],
+                  ["opportunity", "Jobs & Opportunities", "New job postings and opportunities matching your profile"],
+                  ["message", "Messages", "Direct messages from other alumni"],
+                  ["ai", "AI Insights", "AI-powered recommendations and career suggestions"],
+                  ["campaign", "Campaigns", "Fundraising campaigns and institutional updates"],
+                  ["reengagement", "Re-engagement", "Suggestions when you've been away for a while"],
+                  ["general", "General", "System announcements and other updates"],
                 ] as const).map(([key, label, desc]) => (
                   <div key={key} className="flex items-center justify-between">
                     <div>
@@ -395,8 +412,20 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <Button variant="hero" onClick={() => toast.success("Notification preferences saved!")} className="w-full sm:w-auto">
-              <Save className="h-4 w-4" /> Save Preferences
+            <Button variant="hero" disabled={savingNotifs} onClick={async () => {
+              if (!user) return;
+              setSavingNotifs(true);
+              const { error } = await supabase.from("notification_preferences").update({
+                mentorship: notifPrefs.mentorship, referral: notifPrefs.referral, event: notifPrefs.event,
+                ai: notifPrefs.ai, message: notifPrefs.message, campaign: notifPrefs.campaign,
+                opportunity: notifPrefs.opportunity, reengagement: notifPrefs.reengagement,
+                general: notifPrefs.general, desktop_enabled: notifPrefs.desktop_enabled,
+              }).eq("user_id", user.id);
+              if (error) toast.error(error.message);
+              else toast.success("Notification preferences saved!");
+              setSavingNotifs(false);
+            }} className="w-full sm:w-auto">
+              {savingNotifs ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save Preferences
             </Button>
           </motion.div>
         </TabsContent>
