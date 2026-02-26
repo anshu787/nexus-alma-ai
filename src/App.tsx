@@ -22,6 +22,7 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 import MessagesPage from "./pages/MessagesPage";
 import InstitutionBranding from "./pages/InstitutionBranding";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
+import ApiDocsPage from "./pages/ApiDocsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ function DashPage({ children }: { children: React.ReactNode }) {
 const AppRoutes = () => (
   <Routes>
     <Route path="/" element={<LandingPage />} />
+    <Route path="/api-docs" element={<ApiDocsPage />} />
     <Route path="/auth" element={<AuthPage />} />
     <Route path="/dashboard" element={<DashPage><DashboardOverview /></DashPage>} />
     <Route path="/dashboard/directory" element={<DashPage><AlumniDirectory /></DashPage>} />
