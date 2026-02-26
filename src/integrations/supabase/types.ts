@@ -605,6 +605,7 @@ export type Database = {
       }
       opportunities: {
         Row: {
+          apply_url: string | null
           company: string
           created_at: string
           deadline: string | null
@@ -622,6 +623,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          apply_url?: string | null
           company: string
           created_at?: string
           deadline?: string | null
@@ -639,6 +641,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          apply_url?: string | null
           company?: string
           created_at?: string
           deadline?: string | null

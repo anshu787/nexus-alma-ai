@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Briefcase, MapPin, Clock, DollarSign, Plus, Send, Building2, Loader2, Search, User } from "lucide-react";
+import { Briefcase, MapPin, Clock, DollarSign, Plus, Send, Building2, Loader2, Search, User, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -23,6 +23,7 @@ interface Opportunity {
   salary_range: string | null;
   created_at: string;
   description: string | null;
+  apply_url: string | null;
 }
 
 interface Referral {
@@ -54,7 +55,8 @@ export default function OpportunitiesPage() {
   const [loading, setLoading] = useState(true);
   const [postOpen, setPostOpen] = useState(false);
   const [referralOpen, setReferralOpen] = useState(false);
-  const [newJob, setNewJob] = useState({ title: "", company: "", location: "", type: "job", employment_type: "full-time", salary_range: "", description: "" });
+  const [selectedJob, setSelectedJob] = useState<Opportunity | null>(null);
+  const [newJob, setNewJob] = useState({ title: "", company: "", location: "", type: "job", employment_type: "full-time", salary_range: "", description: "", apply_url: "" });
   const [newReferral, setNewReferral] = useState({ company: "", position: "", alumni_id: "" });
 
   // Alumni search state
@@ -108,11 +110,12 @@ export default function OpportunitiesPage() {
 
   const postJob = async () => {
     if (!user || !newJob.title || !newJob.company) { toast.error("Fill required fields"); return; }
-    const { error } = await supabase.from("opportunities").insert({ ...newJob, posted_by: user.id });
+    const payload: any = { ...newJob, posted_by: user.id };
+    if (!payload.apply_url) delete payload.apply_url;
+    const { error } = await supabase.from("opportunities").insert(payload);
     if (error) { toast.error(error.message); return; }
     toast.success("Opportunity posted!");
     setPostOpen(false);
-    // Refresh
     const { data } = await supabase.from("opportunities").select("*").eq("is_active", true).order("created_at", { ascending: false });
     setJobs((data || []).map(o => ({ ...o, skills_required: o.skills_required || [] })));
   };
@@ -222,6 +225,7 @@ export default function OpportunitiesPage() {
                   <div><Label>Location</Label><Input value={newJob.location} onChange={(e) => setNewJob(p => ({ ...p, location: e.target.value }))} /></div>
                   <div><Label>Salary Range</Label><Input value={newJob.salary_range} onChange={(e) => setNewJob(p => ({ ...p, salary_range: e.target.value }))} /></div>
                 </div>
+                <div><Label>Apply URL</Label><Input value={newJob.apply_url} onChange={(e) => setNewJob(p => ({ ...p, apply_url: e.target.value }))} placeholder="https://careers.company.com/apply" /></div>
                 <div><Label>Description</Label><Textarea value={newJob.description} onChange={(e) => setNewJob(p => ({ ...p, description: e.target.value }))} /></div>
                 <Button variant="hero" className="w-full" onClick={postJob}>Post</Button>
               </div>
@@ -236,7 +240,8 @@ export default function OpportunitiesPage() {
         <TabsContent value="jobs" className="mt-4 space-y-3">
           {jobs.map((j, i) => (
             <motion.div key={j.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-              className="bg-card border border-border rounded-xl p-5 shadow-card">
+              className="bg-card border border-border rounded-xl p-5 shadow-card cursor-pointer hover:shadow-lg transition-shadow"
+              onClick={() => setSelectedJob(j)}>
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="font-heading font-semibold text-card-foreground">{j.title}</h3>
@@ -273,6 +278,72 @@ export default function OpportunitiesPage() {
           {referrals.length === 0 && <div className="text-center py-12 text-muted-foreground text-sm">No referral requests yet.</div>}
         </TabsContent>
       </Tabs>
+
+      {/* Opportunity Detail Modal */}
+      <Dialog open={!!selectedJob} onOpenChange={(open) => !open && setSelectedJob(null)}>
+        <DialogContent className="max-w-lg">
+          {selectedJob && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedJob.title}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-2">
+                <div className="flex flex-wrap gap-2">
+                  <Badge className={typeBadge[selectedJob.employment_type || "full-time"] || typeBadge["full-time"]} variant="outline">{selectedJob.employment_type || selectedJob.type}</Badge>
+                  <span className="text-xs text-muted-foreground">{timeAgo(selectedJob.created_at)}</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="text-foreground">{selectedJob.company}</span>
+                  </div>
+                  {selectedJob.location && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="text-foreground">{selectedJob.location}</span>
+                    </div>
+                  )}
+                  {selectedJob.salary_range && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <DollarSign className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="text-foreground">{selectedJob.salary_range}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 text-sm">
+                    <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="text-foreground">{timeAgo(selectedJob.created_at)}</span>
+                  </div>
+                </div>
+
+                {selectedJob.description && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Description</h4>
+                    <p className="text-sm text-foreground whitespace-pre-wrap">{selectedJob.description}</p>
+                  </div>
+                )}
+
+                {selectedJob.skills_required.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Skills Required</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedJob.skills_required.map(s => <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>)}
+                    </div>
+                  </div>
+                )}
+
+                {selectedJob.apply_url && (
+                  <a href={selectedJob.apply_url} target="_blank" rel="noopener noreferrer" className="block">
+                    <Button variant="hero" className="w-full">
+                      <ExternalLink className="h-4 w-4" /> Apply Now
+                    </Button>
+                  </a>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
