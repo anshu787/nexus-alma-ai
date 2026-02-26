@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Send, Check, CheckCheck, Search, ArrowLeft, Loader2 } from "lucide-react";
+import { Send, Check, CheckCheck, Search, ArrowLeft, Loader2, Plus, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -46,6 +47,10 @@ export default function MessagesPage() {
   const [messageInput, setMessageInput] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [showNewChat, setShowNewChat] = useState(false);
+  const [alumniSearch, setAlumniSearch] = useState("");
+  const [alumniResults, setAlumniResults] = useState<{ user_id: string; full_name: string; designation: string | null; company: string | null }[]>([]);
+  const [searchingAlumni, setSearchingAlumni] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Build conversation list from messages table
@@ -153,12 +158,95 @@ export default function MessagesPage() {
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-accent" /></div>;
 
+  // Search alumni for new conversation
+  const searchAlumni = async (q: string) => {
+    setAlumniSearch(q);
+    if (q.trim().length < 2) { setAlumniResults([]); return; }
+    setSearchingAlumni(true);
+    const { data } = await supabase
+      .from("profiles")
+      .select("user_id, full_name, designation, company")
+      .neq("user_id", user?.id || "")
+      .ilike("full_name", `%${q}%`)
+      .limit(10);
+    setAlumniResults(data || []);
+    setSearchingAlumni(false);
+  };
+
+  const startConversation = (peerId: string) => {
+    setShowNewChat(false);
+    setAlumniSearch("");
+    setAlumniResults([]);
+    setActiveChat(peerId);
+    // Add to peers if not already there
+    const existing = peers.find((p) => p.user_id === peerId);
+    if (!existing) {
+      const alumniProfile = alumniResults.find((a) => a.user_id === peerId);
+      setPeers((prev) => [{
+        user_id: peerId,
+        full_name: alumniProfile?.full_name || "Alumni",
+        last_message: "",
+        last_time: new Date().toISOString(),
+        unread: 0,
+      }, ...prev]);
+    }
+  };
+
   return (
     <div className="flex h-[calc(100vh-7rem)] bg-card border border-border rounded-xl overflow-hidden shadow-card">
+      {/* New Conversation Dialog */}
+      <Dialog open={showNewChat} onOpenChange={setShowNewChat}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-heading">New Conversation</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-2">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <input
+                value={alumniSearch}
+                onChange={(e) => searchAlumni(e.target.value)}
+                placeholder="Search alumni by name..."
+                className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-full"
+                autoFocus
+              />
+            </div>
+            <div className="max-h-60 overflow-y-auto space-y-1">
+              {searchingAlumni && <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-accent" /></div>}
+              {!searchingAlumni && alumniSearch.length >= 2 && alumniResults.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-4">No alumni found</p>
+              )}
+              {alumniResults.map((a) => (
+                <button
+                  key={a.user_id}
+                  onClick={() => startConversation(a.user_id)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-secondary transition-colors text-left"
+                >
+                  <Avatar className="h-9 w-9">
+                    <AvatarFallback className="bg-accent/10 text-accent font-heading text-xs">{getInitials(a.full_name)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-card-foreground truncate">{a.full_name}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {[a.designation, a.company].filter(Boolean).join(" at ") || "Alumni"}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Conversation list */}
       <div className={`w-full sm:w-80 border-r border-border flex flex-col shrink-0 ${activeChat ? "hidden sm:flex" : "flex"}`}>
         <div className="p-3 border-b border-border">
-          <h2 className="font-heading font-semibold text-card-foreground mb-2">Messages</h2>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-heading font-semibold text-card-foreground">Messages</h2>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowNewChat(true)}>
+              <Plus className="h-4 w-4 text-accent" />
+            </Button>
+          </div>
           <div className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-1.5">
             <Search className="h-3.5 w-3.5 text-muted-foreground" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search conversations..." className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-full" />

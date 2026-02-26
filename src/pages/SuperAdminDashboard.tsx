@@ -74,8 +74,19 @@ export default function SuperAdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [flaggedPosts, setFlaggedPosts] = useState(mockFlaggedPosts);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
+  // Check role
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("user_roles").select("role").eq("user_id", user.id).then(({ data }) => {
+      const roles = (data || []).map((r) => r.role);
+      setIsAdmin(roles.includes("super_admin"));
+    });
+  }, [user]);
 
   useEffect(() => {
+    if (isAdmin !== true) return;
     (async () => {
       const { data } = await supabase.from("institutions").select("*").order("created_at", { ascending: false });
       if (data) {
@@ -87,7 +98,17 @@ export default function SuperAdminDashboard() {
       }
       setLoading(false);
     })();
-  }, []);
+  }, [isAdmin]);
+
+  if (isAdmin === null) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-accent" /></div>;
+
+  if (!isAdmin) return (
+    <div className="text-center py-20">
+      <Shield className="h-12 w-12 text-destructive/30 mx-auto mb-4" />
+      <h2 className="text-lg font-heading font-semibold text-foreground">Access Denied</h2>
+      <p className="text-sm text-muted-foreground mt-1">You need Super Admin privileges to access this dashboard.</p>
+    </div>
+  );
 
   const dismissPost = (id: string) => {
     setFlaggedPosts((prev) => prev.filter((p) => p.id !== id));
