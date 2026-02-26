@@ -14,16 +14,355 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      event_rsvps: {
+        Row: {
+          created_at: string
+          event_id: string
+          id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          id?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_rsvps_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          end_date: string | null
+          event_type: string
+          id: string
+          image_url: string | null
+          institution_id: string | null
+          is_virtual: boolean | null
+          location: string | null
+          max_attendees: number | null
+          start_date: string
+          title: string
+          updated_at: string
+          virtual_link: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          end_date?: string | null
+          event_type?: string
+          id?: string
+          image_url?: string | null
+          institution_id?: string | null
+          is_virtual?: boolean | null
+          location?: string | null
+          max_attendees?: number | null
+          start_date: string
+          title: string
+          updated_at?: string
+          virtual_link?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          end_date?: string | null
+          event_type?: string
+          id?: string
+          image_url?: string | null
+          institution_id?: string | null
+          is_virtual?: boolean | null
+          location?: string | null
+          max_attendees?: number | null
+          start_date?: string
+          title?: string
+          updated_at?: string
+          virtual_link?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_institution_id_fkey"
+            columns: ["institution_id"]
+            isOneToOne: false
+            referencedRelation: "institutions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      institutions: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          logo_url: string | null
+          name: string
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          logo_url?: string | null
+          name: string
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          logo_url?: string | null
+          name?: string
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      opportunities: {
+        Row: {
+          company: string
+          created_at: string
+          deadline: string | null
+          description: string | null
+          employment_type: string | null
+          id: string
+          institution_id: string | null
+          is_active: boolean | null
+          location: string | null
+          posted_by: string | null
+          salary_range: string | null
+          skills_required: string[] | null
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          company: string
+          created_at?: string
+          deadline?: string | null
+          description?: string | null
+          employment_type?: string | null
+          id?: string
+          institution_id?: string | null
+          is_active?: boolean | null
+          location?: string | null
+          posted_by?: string | null
+          salary_range?: string | null
+          skills_required?: string[] | null
+          title: string
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          company?: string
+          created_at?: string
+          deadline?: string | null
+          description?: string | null
+          employment_type?: string | null
+          id?: string
+          institution_id?: string | null
+          is_active?: boolean | null
+          location?: string | null
+          posted_by?: string | null
+          salary_range?: string | null
+          skills_required?: string[] | null
+          title?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "opportunities_institution_id_fkey"
+            columns: ["institution_id"]
+            isOneToOne: false
+            referencedRelation: "institutions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          batch: string | null
+          bio: string | null
+          company: string | null
+          created_at: string
+          department: string | null
+          designation: string | null
+          engagement_score: number | null
+          experience_years: number | null
+          full_name: string
+          id: string
+          industry: string | null
+          institution_id: string | null
+          interests: string[] | null
+          is_hiring: boolean | null
+          is_mentor: boolean | null
+          is_verified: boolean | null
+          location: string | null
+          passing_year: number | null
+          profile_completion: number | null
+          skills: string[] | null
+          social_links: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          batch?: string | null
+          bio?: string | null
+          company?: string | null
+          created_at?: string
+          department?: string | null
+          designation?: string | null
+          engagement_score?: number | null
+          experience_years?: number | null
+          full_name?: string
+          id?: string
+          industry?: string | null
+          institution_id?: string | null
+          interests?: string[] | null
+          is_hiring?: boolean | null
+          is_mentor?: boolean | null
+          is_verified?: boolean | null
+          location?: string | null
+          passing_year?: number | null
+          profile_completion?: number | null
+          skills?: string[] | null
+          social_links?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          batch?: string | null
+          bio?: string | null
+          company?: string | null
+          created_at?: string
+          department?: string | null
+          designation?: string | null
+          engagement_score?: number | null
+          experience_years?: number | null
+          full_name?: string
+          id?: string
+          industry?: string | null
+          institution_id?: string | null
+          interests?: string[] | null
+          is_hiring?: boolean | null
+          is_mentor?: boolean | null
+          is_verified?: boolean | null
+          location?: string | null
+          passing_year?: number | null
+          profile_completion?: number | null
+          skills?: string[] | null
+          social_links?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_institution_id_fkey"
+            columns: ["institution_id"]
+            isOneToOne: false
+            referencedRelation: "institutions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referral_requests: {
+        Row: {
+          alumni_id: string
+          company: string
+          created_at: string
+          id: string
+          message: string | null
+          position: string | null
+          requester_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          alumni_id: string
+          company: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          position?: string | null
+          requester_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          alumni_id?: string
+          company?: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          position?: string | null
+          requester_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role:
+        | "super_admin"
+        | "institution_admin"
+        | "alumni"
+        | "student"
+        | "moderator"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +489,14 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: [
+        "super_admin",
+        "institution_admin",
+        "alumni",
+        "student",
+        "moderator",
+      ],
+    },
   },
 } as const

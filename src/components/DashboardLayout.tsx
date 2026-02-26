@@ -1,5 +1,5 @@
 import { ReactNode, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, MessageSquare, Calendar, Briefcase, Brain,
@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -22,6 +23,13 @@ const navItems = [
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -85,8 +93,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-accent" />
             </Button>
             <Avatar className="h-9 w-9">
-              <AvatarFallback className="bg-accent text-accent-foreground font-heading text-sm">JD</AvatarFallback>
+              <AvatarFallback className="bg-accent text-accent-foreground font-heading text-sm">
+                {user?.email?.charAt(0).toUpperCase() || "U"}
+              </AvatarFallback>
             </Avatar>
+            <Button variant="ghost" size="icon" onClick={handleSignOut}>
+              <LogOut className="h-4 w-4 text-muted-foreground" />
+            </Button>
           </div>
         </header>
 
