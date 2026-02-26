@@ -66,7 +66,7 @@ export default function LandingPage() {
           <div className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Features</a>
             <a href="#stats" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Impact</a>
-            <Link to="/dashboard">
+            <Link to="/auth">
               <Button variant="hero" size="sm">Launch Dashboard <ArrowRight className="h-4 w-4" /></Button>
             </Link>
           </div>
@@ -96,7 +96,7 @@ export default function LandingPage() {
               The multi-tenant intelligence platform that transforms alumni databases into living, engaged communities driving real institutional outcomes.
             </motion.p>
             <motion.div variants={fadeUp} custom={3} className="flex flex-wrap gap-4">
-              <Link to="/dashboard">
+              <Link to="/auth">
                 <Button variant="hero" size="xl">
                   Get Started <ArrowRight className="h-5 w-5" />
                 </Button>
@@ -179,7 +179,7 @@ export default function LandingPage() {
           <p className="text-primary-foreground/70 max-w-xl mx-auto mb-10 text-lg">
             Join institutions already achieving measurable outcomes through AI-driven alumni engagement.
           </p>
-          <Link to="/dashboard">
+          <Link to="/auth">
             <Button variant="hero" size="xl">
               Launch Your Platform <ArrowRight className="h-5 w-5" />
             </Button>
