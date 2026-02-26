@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bell, Check, CheckCheck, Brain, Users, Calendar, Briefcase, MessageSquare, X, Loader2 } from "lucide-react";
+import { Bell, Check, CheckCheck, Brain, Users, Calendar, Briefcase, MessageSquare, X, Loader2, Mail, Megaphone, Heart, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -17,12 +18,14 @@ interface Notification {
 }
 
 const typeIcons: Record<string, typeof Bell> = {
-  mentorship: Users, referral: Briefcase, event: Calendar, ai: Brain, message: MessageSquare, general: Bell,
+  mentorship: Heart, referral: Briefcase, event: Calendar, ai: Brain, message: MessageSquare,
+  campaign: Mail, opportunity: TrendingUp, general: Bell,
 };
 
 const typeColors: Record<string, string> = {
   mentorship: "bg-info/10 text-info", referral: "bg-success/10 text-success", event: "bg-accent/10 text-accent",
-  ai: "bg-primary/10 text-primary", message: "bg-warning/10 text-warning", general: "bg-muted text-muted-foreground",
+  ai: "bg-primary/10 text-primary", message: "bg-warning/10 text-warning", campaign: "bg-info/10 text-info",
+  opportunity: "bg-success/10 text-success", general: "bg-muted text-muted-foreground",
 };
 
 function timeAgo(date: string) {
@@ -35,6 +38,7 @@ function timeAgo(date: string) {
 
 export default function NotificationsPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
@@ -90,6 +94,9 @@ export default function NotificationsPage() {
     { key: "mentorship", label: "Mentorship" },
     { key: "referral", label: "Referrals" },
     { key: "event", label: "Events" },
+    { key: "opportunity", label: "Jobs" },
+    { key: "campaign", label: "Campaigns" },
+    { key: "message", label: "Messages" },
     { key: "ai", label: "AI" },
   ];
 
@@ -122,7 +129,8 @@ export default function NotificationsPage() {
             const Icon = typeIcons[n.type] || Bell;
             return (
               <motion.div key={n.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -100 }} transition={{ delay: i * 0.03 }}
-                className={`bg-card border rounded-xl p-4 shadow-card flex items-start gap-3 transition-colors ${n.is_read ? "border-border" : "border-accent/30 bg-accent/[0.02]"}`}>
+                onClick={() => { if (!n.is_read) markRead(n.id); if (n.link) navigate(n.link); }}
+                className={`bg-card border rounded-xl p-4 shadow-card flex items-start gap-3 transition-colors cursor-pointer hover:bg-secondary/50 ${n.is_read ? "border-border" : "border-accent/30 bg-accent/[0.02]"}`}>
                 <div className={`h-10 w-10 rounded-lg flex items-center justify-center shrink-0 ${typeColors[n.type] || typeColors.general}`}>
                   <Icon className="h-5 w-5" />
                 </div>
@@ -130,11 +138,15 @@ export default function NotificationsPage() {
                   <div className="flex items-center gap-2">
                     <h3 className={`text-sm font-heading truncate ${n.is_read ? "text-card-foreground" : "font-semibold text-card-foreground"}`}>{n.title}</h3>
                     {!n.is_read && <span className="h-2 w-2 rounded-full bg-accent shrink-0" />}
+                    <Badge variant="outline" className="text-[10px] ml-auto shrink-0">{n.type}</Badge>
                   </div>
                   {n.message && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>}
-                  <span className="text-[10px] text-muted-foreground mt-1 block">{timeAgo(n.created_at)}</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] text-muted-foreground">{timeAgo(n.created_at)}</span>
+                    {n.link && <span className="text-[10px] text-accent">View →</span>}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                   {!n.is_read && (
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => markRead(n.id)}><Check className="h-3.5 w-3.5 text-muted-foreground" /></Button>
                   )}
