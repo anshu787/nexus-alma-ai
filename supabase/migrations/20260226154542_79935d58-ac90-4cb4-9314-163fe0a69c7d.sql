@@ -1,0 +1,1 @@
+ALTER TABLE public.opportunities ADD COLUMN apply_url text DEFAULT NULL;
