@@ -3,13 +3,15 @@ import { motion } from "framer-motion";
 import {
   Shield, Building2, Users, BarChart3, MessageSquare, AlertTriangle,
   CreditCard, TrendingUp, Activity, Search, MoreHorizontal, Eye,
-  Ban, CheckCircle2, Loader2, Globe, UserCog, ChevronDown
+  Ban, CheckCircle2, Loader2, Globe, UserCog, ChevronDown, Plus, UserPlus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -71,6 +73,14 @@ function StatCard({ icon: Icon, label, value, change, color }: { icon: any; labe
 
 const ROLES = ["super_admin", "institution_admin", "alumni", "student", "moderator"] as const;
 
+const roleBadgeColors: Record<string, string> = {
+  super_admin: "bg-destructive/10 text-destructive border-destructive/20",
+  institution_admin: "bg-accent/10 text-accent border-accent/20",
+  alumni: "bg-info/10 text-info border-info/20",
+  student: "bg-success/10 text-success border-success/20",
+  moderator: "bg-warning/10 text-warning border-warning/20",
+};
+
 interface UserWithRole {
   user_id: string;
   full_name: string;
@@ -89,7 +99,11 @@ export default function SuperAdminDashboard() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [usersWithRoles, setUsersWithRoles] = useState<UserWithRole[]>([]);
   const [roleSearch, setRoleSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
   const [roleLoading, setRoleLoading] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newUser, setNewUser] = useState({ email: "", password: "", full_name: "", role: "alumni" as string });
 
   // Check role
   useEffect(() => {
@@ -141,10 +155,36 @@ export default function SuperAdminDashboard() {
         await supabase.from("user_roles").insert({ user_id: targetUserId, role: newRole as any });
       }
       setUsersWithRoles((prev) => prev.map((u) => u.user_id === targetUserId ? { ...u, role: newRole } : u));
-      toast.success(`Role updated to ${newRole}`);
+      toast.success(`Role updated to ${newRole.replace(/_/g, " ")}`);
     } catch {
       toast.error("Failed to update role");
     }
+  };
+
+  const createUser = async () => {
+    if (!newUser.email || !newUser.password || !newUser.full_name) {
+      toast.error("Fill all required fields");
+      return;
+    }
+    if (newUser.password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+    setCreating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-user-admin", {
+        body: { email: newUser.email, password: newUser.password, full_name: newUser.full_name, role: newUser.role },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`User ${newUser.full_name} created as ${newUser.role.replace(/_/g, " ")}`);
+      setCreateOpen(false);
+      setNewUser({ email: "", password: "", full_name: "", role: "alumni" });
+      fetchUsersWithRoles();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to create user");
+    }
+    setCreating(false);
   };
 
   if (isAdmin === null) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-accent" /></div>;
@@ -171,36 +211,143 @@ export default function SuperAdminDashboard() {
     i.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const filteredUsers = usersWithRoles.filter((u) =>
-    u.full_name.toLowerCase().includes(roleSearch.toLowerCase()) ||
-    u.role.toLowerCase().includes(roleSearch.toLowerCase())
-  );
+  const filteredUsers = usersWithRoles.filter((u) => {
+    const matchSearch = u.full_name.toLowerCase().includes(roleSearch.toLowerCase()) ||
+      u.role.toLowerCase().includes(roleSearch.toLowerCase()) ||
+      (u.company || "").toLowerCase().includes(roleSearch.toLowerCase());
+    const matchRole = roleFilter === "all" || u.role === roleFilter;
+    return matchSearch && matchRole;
+  });
+
+  // Role counts
+  const roleCounts = usersWithRoles.reduce((acc, u) => {
+    acc[u.role] = (acc[u.role] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
-          <Shield className="h-6 w-6 text-accent" /> Super Admin Dashboard
-        </h1>
-        <p className="text-muted-foreground text-sm">Platform-wide management and analytics</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
+            <Shield className="h-6 w-6 text-accent" /> Super Admin Dashboard
+          </h1>
+          <p className="text-muted-foreground text-sm">Platform-wide management and analytics</p>
+        </div>
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogTrigger asChild>
+            <Button variant="hero" size="sm"><UserPlus className="h-4 w-4" /> Create User</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Create New User</DialogTitle></DialogHeader>
+            <div className="space-y-3 mt-2">
+              <div><Label>Full Name *</Label><Input value={newUser.full_name} onChange={(e) => setNewUser(p => ({ ...p, full_name: e.target.value }))} placeholder="John Doe" /></div>
+              <div><Label>Email *</Label><Input type="email" value={newUser.email} onChange={(e) => setNewUser(p => ({ ...p, email: e.target.value }))} placeholder="john@example.com" /></div>
+              <div><Label>Password *</Label><Input type="password" value={newUser.password} onChange={(e) => setNewUser(p => ({ ...p, password: e.target.value }))} placeholder="Min 6 characters" /></div>
+              <div>
+                <Label>Role</Label>
+                <Select value={newUser.role} onValueChange={(val) => setNewUser(p => ({ ...p, role: val }))}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>{r.replace(/_/g, " ")}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button variant="hero" className="w-full" onClick={createUser} disabled={creating}>
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                {creating ? "Creating..." : "Create User"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Building2} label="Total Institutions" value={`${institutions.length}`} change="+3 this month" color="bg-info/10 text-info" />
-        <StatCard icon={Users} label="Total Alumni" value="3,450" change="+12%" color="bg-accent/10 text-accent" />
-        <StatCard icon={Activity} label="Daily Active Users" value="892" change="+8%" color="bg-success/10 text-success" />
-        <StatCard icon={CreditCard} label="MRR" value="$24,500" change="+15%" color="bg-warning/10 text-warning" />
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <StatCard icon={Users} label="Total Users" value={`${usersWithRoles.length}`} change="All" color="bg-primary/10 text-primary" />
+        <StatCard icon={Shield} label="Admins" value={`${(roleCounts["super_admin"] || 0) + (roleCounts["institution_admin"] || 0)}`} change="Super + Inst." color="bg-destructive/10 text-destructive" />
+        <StatCard icon={Users} label="Alumni" value={`${roleCounts["alumni"] || 0}`} change="" color="bg-info/10 text-info" />
+        <StatCard icon={Users} label="Students" value={`${roleCounts["student"] || 0}`} change="" color="bg-success/10 text-success" />
+        <StatCard icon={Users} label="Moderators" value={`${roleCounts["moderator"] || 0}`} change="" color="bg-warning/10 text-warning" />
       </div>
 
-      <Tabs defaultValue="tenants" className="space-y-4">
+      <Tabs defaultValue="roles" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="tenants">Tenants</TabsTrigger>
           <TabsTrigger value="roles">User Roles</TabsTrigger>
+          <TabsTrigger value="tenants">Tenants</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="moderation">Moderation</TabsTrigger>
           <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
         </TabsList>
+
+        {/* User Roles */}
+        <TabsContent value="roles" className="space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-2 flex-1 max-w-sm">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <input value={roleSearch} onChange={(e) => setRoleSearch(e.target.value)} placeholder="Search users..." className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-full" />
+            </div>
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="w-44 h-9 text-xs"><SelectValue placeholder="Filter by role" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Roles</SelectItem>
+                {ROLES.map((r) => (
+                  <SelectItem key={r} value={r}>{r.replace(/_/g, " ")} ({roleCounts[r] || 0})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Badge variant="outline" className="text-xs">{filteredUsers.length} users</Badge>
+          </div>
+
+          {roleLoading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-accent" /></div>
+          ) : (
+            <div className="space-y-2">
+              {filteredUsers.slice(0, 50).map((u, i) => (
+                <motion.div
+                  key={u.user_id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.01 }}
+                  className="bg-card border border-border rounded-xl p-4 shadow-card flex items-center gap-4"
+                >
+                  <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                    <span className="font-heading font-bold text-muted-foreground text-sm">
+                      {u.full_name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-heading font-semibold text-card-foreground">{u.full_name || "Unnamed User"}</p>
+                    <p className="text-xs text-muted-foreground">{u.company || "No company"}</p>
+                  </div>
+                  <Badge variant="outline" className={`text-[10px] ${roleBadgeColors[u.role] || ""}`}>
+                    {u.role.replace(/_/g, " ")}
+                  </Badge>
+                  <Select
+                    value={u.role}
+                    onValueChange={(val) => updateUserRole(u.user_id, val, u.role_id)}
+                    disabled={u.user_id === user?.id}
+                  >
+                    <SelectTrigger className="w-44 h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ROLES.map((r) => (
+                        <SelectItem key={r} value={r} className="text-xs">{r.replace(/_/g, " ")}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {u.user_id === user?.id && <Badge variant="outline" className="text-[10px]">You</Badge>}
+                </motion.div>
+              ))}
+              {filteredUsers.length > 50 && (
+                <p className="text-center text-xs text-muted-foreground py-2">Showing 50 of {filteredUsers.length} users. Use search to narrow down.</p>
+              )}
+            </div>
+          )}
+        </TabsContent>
 
         {/* Tenant Management */}
         <TabsContent value="tenants" className="space-y-4">
@@ -245,56 +392,6 @@ export default function SuperAdminDashboard() {
                     <Button variant="ghost" size="icon" className="h-8 w-8"><Eye className="h-4 w-4 text-muted-foreground" /></Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4 text-muted-foreground" /></Button>
                   </div>
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        {/* User Roles */}
-        <TabsContent value="roles" className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-2 flex-1 max-w-sm">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <input value={roleSearch} onChange={(e) => setRoleSearch(e.target.value)} placeholder="Search users..." className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-full" />
-            </div>
-            <Badge variant="outline" className="text-xs">{usersWithRoles.length} users</Badge>
-          </div>
-
-          {roleLoading ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-accent" /></div>
-          ) : (
-            <div className="space-y-2">
-              {filteredUsers.map((u, i) => (
-                <motion.div
-                  key={u.user_id}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.02 }}
-                  className="bg-card border border-border rounded-xl p-4 shadow-card flex items-center gap-4"
-                >
-                  <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center shrink-0">
-                    <UserCog className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-heading font-semibold text-card-foreground">{u.full_name || "Unnamed User"}</p>
-                    <p className="text-xs text-muted-foreground">{u.company || "No company"}</p>
-                  </div>
-                  <Select
-                    value={u.role}
-                    onValueChange={(val) => updateUserRole(u.user_id, val, u.role_id)}
-                    disabled={u.user_id === user?.id}
-                  >
-                    <SelectTrigger className="w-44 h-9 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ROLES.map((r) => (
-                        <SelectItem key={r} value={r} className="text-xs">{r.replace(/_/g, " ")}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {u.user_id === user?.id && <Badge variant="outline" className="text-[10px]">You</Badge>}
                 </motion.div>
               ))}
             </div>
