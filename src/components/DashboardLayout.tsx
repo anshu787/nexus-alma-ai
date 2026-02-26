@@ -18,7 +18,7 @@ interface NavItem {
   icon: typeof Bell;
   label: string;
   path: string;
-  adminOnly?: boolean;
+  roles?: string[]; // if set, only these roles see it. If not set, everyone sees it.
 }
 
 const navItems: NavItem[] = [
@@ -29,25 +29,25 @@ const navItems: NavItem[] = [
   { icon: Calendar, label: "Events", path: "/dashboard/events" },
   { icon: Briefcase, label: "Opportunities", path: "/dashboard/opportunities" },
   { icon: Brain, label: "AI Assistant", path: "/dashboard/ai" },
-  { icon: Target, label: "Skill Gap", path: "/dashboard/skill-gap" },
+  { icon: Target, label: "Skill Gap", path: "/dashboard/skill-gap", roles: ["alumni", "student"] },
   { icon: Trophy, label: "Leaderboard", path: "/dashboard/leaderboard" },
   { icon: Share2, label: "Network Graph", path: "/dashboard/network" },
   { icon: Bell, label: "Notifications", path: "/dashboard/notifications" },
-  { icon: Heart, label: "Mentorship", path: "/dashboard/mentorship" },
-  { icon: Users, label: "Mentor Dashboard", path: "/dashboard/mentor-dashboard" },
-  { icon: TrendingUp, label: "Career Path", path: "/dashboard/career-path" },
+  { icon: Heart, label: "Mentorship", path: "/dashboard/mentorship", roles: ["alumni", "student", "moderator"] },
+  { icon: Users, label: "Mentor Dashboard", path: "/dashboard/mentor-dashboard", roles: ["alumni"] },
+  { icon: TrendingUp, label: "Career Path", path: "/dashboard/career-path", roles: ["alumni", "student"] },
   { icon: Award, label: "Success Stories", path: "/dashboard/stories" },
   { icon: MessageCircle, label: "Career Forum", path: "/dashboard/forum" },
-  { icon: DollarSign, label: "Fundraising", path: "/dashboard/fundraising" },
+  { icon: DollarSign, label: "Fundraising", path: "/dashboard/fundraising", roles: ["super_admin", "institution_admin", "alumni"] },
   { icon: Globe, label: "Global Map", path: "/dashboard/global-map" },
   { icon: User, label: "My Profile", path: "/dashboard/profile" },
   { icon: BarChart3, label: "Analytics", path: "/dashboard/analytics" },
-  { icon: BarChart3, label: "Admin Analytics", path: "/dashboard/admin-analytics", adminOnly: true },
-  { icon: Mail, label: "Campaigns", path: "/dashboard/campaigns", adminOnly: true },
-  { icon: Award, label: "Impact", path: "/dashboard/impact" },
-  { icon: ShieldCheck, label: "Verification", path: "/dashboard/verification", adminOnly: true },
-  { icon: Palette, label: "Branding", path: "/dashboard/branding", adminOnly: true },
-  { icon: Shield, label: "Super Admin", path: "/dashboard/admin", adminOnly: true },
+  { icon: BarChart3, label: "Admin Analytics", path: "/dashboard/admin-analytics", roles: ["super_admin", "institution_admin"] },
+  { icon: Mail, label: "Campaigns", path: "/dashboard/campaigns", roles: ["super_admin", "institution_admin"] },
+  { icon: Award, label: "Impact", path: "/dashboard/impact", roles: ["super_admin", "institution_admin", "moderator"] },
+  { icon: ShieldCheck, label: "Verification", path: "/dashboard/verification", roles: ["super_admin", "institution_admin", "moderator"] },
+  { icon: Palette, label: "Branding", path: "/dashboard/branding", roles: ["super_admin", "institution_admin"] },
+  { icon: Shield, label: "Super Admin", path: "/dashboard/admin", roles: ["super_admin"] },
   { icon: Settings, label: "Settings", path: "/dashboard/settings" },
 ];
 
@@ -83,21 +83,20 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [userRoles, setUserRoles] = useState<string[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { requestPermission, supported: notifSupported } = useBrowserNotifications();
 
-  // Check if user has admin role
+  // Fetch user roles
   useEffect(() => {
     if (!user) return;
     supabase.from("user_roles").select("role").eq("user_id", user.id)
       .then(({ data }) => {
         if (data) {
-          const roles = data.map((r) => r.role);
-          setIsAdmin(roles.includes("super_admin") || roles.includes("institution_admin"));
+          setUserRoles(data.map((r) => r.role));
         }
       });
   }, [user]);
@@ -105,7 +104,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // Prompt for browser notification permission on first load
   useEffect(() => {
     if (notifSupported && Notification.permission === "default") {
-      // Delay slightly so it doesn't feel intrusive
       const t = setTimeout(() => requestPermission(), 5000);
       return () => clearTimeout(t);
     }
@@ -128,12 +126,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     };
     fetchNotifs();
 
-    // Also get total unread count
     supabase.from("notifications").select("id", { count: "exact", head: true })
       .eq("user_id", user.id).eq("is_read", false)
       .then(({ count }) => { if (count !== null) setUnreadCount(count); });
 
-    // Realtime
     const ch = supabase.channel("topbar-notifs")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
         (payload) => {
@@ -165,6 +161,22 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     navigate("/");
   };
 
+  // Super admins see everything
+  const isSuperAdmin = userRoles.includes("super_admin");
+
+  const visibleNavItems = navItems.filter((item) => {
+    if (!item.roles) return true; // visible to all
+    if (isSuperAdmin) return true; // super admin sees all
+    return item.roles.some((r) => userRoles.includes(r));
+  });
+
+  // Role label for display
+  const primaryRole = isSuperAdmin ? "Super Admin"
+    : userRoles.includes("institution_admin") ? "Institution Admin"
+    : userRoles.includes("moderator") ? "Moderator"
+    : userRoles.includes("student") ? "Student"
+    : "Alumni";
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Sidebar */}
@@ -177,10 +189,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           {!collapsed && <span className="font-heading font-bold text-sidebar-foreground text-lg truncate">AlumniOS</span>}
         </div>
 
-        <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
-          {navItems
-            .filter((item) => !item.adminOnly || isAdmin)
-            .map((item) => {
+        {/* Role Badge */}
+        {!collapsed && (
+          <div className="px-4 py-2">
+            <Badge variant="outline" className="text-[10px] w-full justify-center">{primaryRole}</Badge>
+          </div>
+        )}
+
+        <nav className="flex-1 py-2 px-2 space-y-1 overflow-y-auto">
+          {visibleNavItems.map((item) => {
             const active = location.pathname === item.path;
             return (
               <Link
