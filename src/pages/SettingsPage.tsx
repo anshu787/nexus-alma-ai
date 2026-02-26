@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -74,6 +74,8 @@ export default function SettingsPage() {
   const [privacyPrefs, setPrivacyPrefs] = useState<PrivacyPrefs>(defaultPrivacyPrefs);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [skillInput, setSkillInput] = useState("");
   const [interestInput, setInterestInput] = useState("");
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -101,6 +103,7 @@ export default function SettingsPage() {
           is_mentor: data.is_mentor || false,
           is_hiring: data.is_hiring || false,
         });
+        setAvatarUrl(data.avatar_url || null);
       }
       setLoading(false);
     };
@@ -166,6 +169,42 @@ export default function SettingsPage() {
     await signOut();
   };
 
+  const uploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Image must be under 5MB"); return; }
+
+    setUploadingAvatar(true);
+    const ext = file.name.split(".").pop();
+    const path = `${user.id}/avatar.${ext}`;
+
+    const { error: uploadError } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+    if (uploadError) { toast.error(uploadError.message); setUploadingAvatar(false); return; }
+
+    const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
+    const url = `${publicUrl}?t=${Date.now()}`;
+
+    const { error: updateError } = await supabase.from("profiles").update({ avatar_url: url }).eq("user_id", user.id);
+    if (updateError) toast.error(updateError.message);
+    else { setAvatarUrl(url); toast.success("Avatar updated!"); }
+    setUploadingAvatar(false);
+  };
+
+  const removeAvatar = async () => {
+    if (!user) return;
+    setUploadingAvatar(true);
+    // List and remove files in user folder
+    const { data: files } = await supabase.storage.from("avatars").list(user.id);
+    if (files && files.length > 0) {
+      await supabase.storage.from("avatars").remove(files.map((f) => `${user.id}/${f.name}`));
+    }
+    await supabase.from("profiles").update({ avatar_url: null }).eq("user_id", user.id);
+    setAvatarUrl(null);
+    toast.success("Avatar removed");
+    setUploadingAvatar(false);
+  };
+
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-accent" /></div>;
 
   return (
@@ -198,13 +237,26 @@ export default function SettingsPage() {
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-xl p-6 shadow-card space-y-6">
             {/* Avatar & Name */}
             <div className="flex items-center gap-4">
-              <Avatar className="h-16 w-16">
-                <AvatarFallback className="bg-accent text-accent-foreground font-heading text-xl">
-                  {profile.full_name?.charAt(0)?.toUpperCase() || "U"}
-                </AvatarFallback>
-              </Avatar>
+              <div className="relative group">
+                <Avatar className="h-16 w-16">
+                  {avatarUrl && <AvatarImage src={avatarUrl} alt="Avatar" />}
+                  <AvatarFallback className="bg-accent text-accent-foreground font-heading text-xl">
+                    {profile.full_name?.charAt(0)?.toUpperCase() || "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <label className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                  {uploadingAvatar ? <Loader2 className="h-5 w-5 text-white animate-spin" /> : <Camera className="h-5 w-5 text-white" />}
+                  <input type="file" accept="image/*" className="hidden" onChange={uploadAvatar} disabled={uploadingAvatar} />
+                </label>
+                {avatarUrl && (
+                  <button onClick={removeAvatar} disabled={uploadingAvatar} className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
               <div className="flex-1">
                 <Input value={profile.full_name} onChange={(e) => setProfile({ ...profile, full_name: e.target.value })} placeholder="Full Name" className="text-lg font-heading font-semibold" />
+                <p className="text-xs text-muted-foreground mt-1">Hover avatar to change photo</p>
               </div>
             </div>
 
