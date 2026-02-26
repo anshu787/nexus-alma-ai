@@ -24,16 +24,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // Log daily login engagement on sign in
+      if (event === 'SIGNED_IN' && session?.user) {
+        setTimeout(() => {
+          supabase.rpc('log_login_engagement').then(({ error }) => {
+            if (error) console.error('Login engagement log failed:', error);
+          });
+        }, 0);
+      }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // Also log on existing session restore
+      if (session?.user) {
+        supabase.rpc('log_login_engagement').then(({ error }) => {
+          if (error) console.error('Login engagement log failed:', error);
+        });
+      }
     });
 
     return () => subscription.unsubscribe();

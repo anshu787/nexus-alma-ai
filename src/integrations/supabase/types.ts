@@ -743,6 +743,16 @@ export type Database = {
         }
         Returns: boolean
       }
+      log_engagement: {
+        Args: {
+          p_action: string
+          p_metadata?: Json
+          p_points: number
+          p_user_id: string
+        }
+        Returns: undefined
+      }
+      log_login_engagement: { Args: never; Returns: undefined }
     }
     Enums: {
       app_role:
