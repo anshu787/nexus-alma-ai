@@ -9,7 +9,7 @@ import AuthPage from "./pages/AuthPage";
 import DashboardLayout from "./components/DashboardLayout";
 import DashboardOverview from "./pages/DashboardOverview";
 import AlumniDirectory from "./pages/AlumniDirectory";
-import SocialFeed from "./pages/SocialFeed";
+import SocialFeedV2 from "./pages/SocialFeedV2";
 import EventsPage from "./pages/EventsPage";
 import OpportunitiesPage from "./pages/OpportunitiesPage";
 import AIAssistant from "./pages/AIAssistant";
@@ -17,6 +17,9 @@ import SkillGapAnalyzer from "./pages/SkillGapAnalyzer";
 import ProfilePage from "./pages/ProfilePage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import NetworkGraph from "./pages/NetworkGraph";
+import NotificationsPage from "./pages/NotificationsPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
+import MessagesPage from "./pages/MessagesPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,7 +41,8 @@ const AppRoutes = () => (
     <Route path="/auth" element={<AuthPage />} />
     <Route path="/dashboard" element={<DashPage><DashboardOverview /></DashPage>} />
     <Route path="/dashboard/directory" element={<DashPage><AlumniDirectory /></DashPage>} />
-    <Route path="/dashboard/feed" element={<DashPage><SocialFeed /></DashPage>} />
+    <Route path="/dashboard/feed" element={<DashPage><SocialFeedV2 /></DashPage>} />
+    <Route path="/dashboard/messages" element={<DashPage><MessagesPage /></DashPage>} />
     <Route path="/dashboard/events" element={<DashPage><EventsPage /></DashPage>} />
     <Route path="/dashboard/opportunities" element={<DashPage><OpportunitiesPage /></DashPage>} />
     <Route path="/dashboard/ai" element={<DashPage><AIAssistant /></DashPage>} />
@@ -46,7 +50,8 @@ const AppRoutes = () => (
     <Route path="/dashboard/profile" element={<DashPage><ProfilePage /></DashPage>} />
     <Route path="/dashboard/leaderboard" element={<DashPage><LeaderboardPage /></DashPage>} />
     <Route path="/dashboard/network" element={<DashPage><NetworkGraph /></DashPage>} />
-    <Route path="/dashboard/analytics" element={<DashPage><div className="text-foreground font-heading text-2xl font-bold">Analytics — Coming Soon</div></DashPage>} />
+    <Route path="/dashboard/notifications" element={<DashPage><NotificationsPage /></DashPage>} />
+    <Route path="/dashboard/analytics" element={<DashPage><AnalyticsPage /></DashPage>} />
     <Route path="/dashboard/settings" element={<DashPage><div className="text-foreground font-heading text-2xl font-bold">Settings — Coming Soon</div></DashPage>} />
     <Route path="*" element={<NotFound />} />
   </Routes>

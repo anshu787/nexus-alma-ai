@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, MessageSquare, Calendar, Briefcase, Brain,
   BarChart3, Settings, Sparkles, ChevronLeft, Bell, Search, LogOut,
-  Target, Trophy, Share2, User
+  Target, Trophy, Share2, User, Send
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -14,12 +14,14 @@ const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Users, label: "Directory", path: "/dashboard/directory" },
   { icon: MessageSquare, label: "Feed", path: "/dashboard/feed" },
+  { icon: Send, label: "Messages", path: "/dashboard/messages" },
   { icon: Calendar, label: "Events", path: "/dashboard/events" },
   { icon: Briefcase, label: "Opportunities", path: "/dashboard/opportunities" },
   { icon: Brain, label: "AI Assistant", path: "/dashboard/ai" },
   { icon: Target, label: "Skill Gap", path: "/dashboard/skill-gap" },
   { icon: Trophy, label: "Leaderboard", path: "/dashboard/leaderboard" },
   { icon: Share2, label: "Network Graph", path: "/dashboard/network" },
+  { icon: Bell, label: "Notifications", path: "/dashboard/notifications" },
   { icon: User, label: "My Profile", path: "/dashboard/profile" },
   { icon: BarChart3, label: "Analytics", path: "/dashboard/analytics" },
   { icon: Settings, label: "Settings", path: "/dashboard/settings" },
