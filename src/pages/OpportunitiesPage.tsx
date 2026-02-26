@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Briefcase, MapPin, Clock, DollarSign, Plus, Send, Building2, Filter } from "lucide-react";
+import { Briefcase, MapPin, Clock, DollarSign, Plus, Send, Building2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -8,152 +8,170 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
-const mockJobs = [
-  { id: "1", title: "Senior ML Engineer", company: "Google", location: "Bangalore", type: "job", employment_type: "full-time", skills: ["Python", "TensorFlow", "MLOps"], salary: "₹40-60 LPA", posted: "2d ago", postedBy: "Priya Sharma" },
-  { id: "2", title: "Product Manager", company: "Microsoft", location: "Hyderabad", type: "job", employment_type: "full-time", skills: ["Product Strategy", "Agile", "Data Analysis"], salary: "₹35-50 LPA", posted: "5d ago", postedBy: "Arjun Mehta" },
-  { id: "3", title: "Frontend Intern", company: "Razorpay", location: "Mumbai", type: "internship", employment_type: "internship", skills: ["React", "TypeScript", "CSS"], salary: "₹50K/month", posted: "1d ago", postedBy: "Maya Patel" },
-  { id: "4", title: "Data Science Intern", company: "Flipkart", location: "Bangalore", type: "internship", employment_type: "internship", skills: ["Python", "SQL", "Statistics"], salary: "₹40K/month", posted: "3d ago", postedBy: "Vikram Singh" },
-  { id: "5", title: "Backend Developer", company: "Stripe", location: "Remote", type: "job", employment_type: "remote", skills: ["Node.js", "PostgreSQL", "APIs"], salary: "$120-160K", posted: "1w ago", postedBy: "Amit Joshi" },
-];
+interface Opportunity {
+  id: string;
+  title: string;
+  company: string;
+  location: string | null;
+  type: string;
+  employment_type: string | null;
+  skills_required: string[];
+  salary_range: string | null;
+  created_at: string;
+  description: string | null;
+}
 
-const mockReferrals = [
-  { id: "1", company: "Google", position: "SDE-2", requester: "Ravi Kumar", status: "pending", date: "2d ago" },
-  { id: "2", company: "Microsoft", position: "PM Intern", requester: "Sneha Rao", status: "approved", date: "5d ago" },
-  { id: "3", company: "Amazon", position: "SDE-1", requester: "Amit Shah", status: "pending", date: "1d ago" },
-];
+interface Referral {
+  id: string;
+  company: string;
+  position: string | null;
+  status: string;
+  created_at: string;
+}
 
 const typeBadge: Record<string, string> = {
   "full-time": "bg-info/10 text-info border-info/20",
   internship: "bg-accent/10 text-accent border-accent/20",
   remote: "bg-success/10 text-success border-success/20",
+  "part-time": "bg-warning/10 text-warning border-warning/20",
 };
 
 export default function OpportunitiesPage() {
-  const [activeTab, setActiveTab] = useState("jobs");
+  const { user } = useAuth();
+  const [jobs, setJobs] = useState<Opportunity[]>([]);
+  const [referrals, setReferrals] = useState<Referral[]>([]);
+  const [loading, setLoading] = useState(true);
   const [postOpen, setPostOpen] = useState(false);
   const [referralOpen, setReferralOpen] = useState(false);
+  const [newJob, setNewJob] = useState({ title: "", company: "", location: "", type: "job", employment_type: "full-time", salary_range: "", description: "" });
+  const [newReferral, setNewReferral] = useState({ company: "", position: "", alumni_id: "" });
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const { data: opps } = await supabase.from("opportunities").select("*").eq("is_active", true).order("created_at", { ascending: false });
+      setJobs((opps || []).map(o => ({ ...o, skills_required: o.skills_required || [] })));
+
+      if (user) {
+        const { data: refs } = await supabase.from("referral_requests").select("*").or(`requester_id.eq.${user.id},alumni_id.eq.${user.id}`).order("created_at", { ascending: false });
+        setReferrals(refs || []);
+      }
+      setLoading(false);
+    };
+    fetchData();
+  }, [user]);
+
+  const postJob = async () => {
+    if (!user || !newJob.title || !newJob.company) { toast.error("Fill required fields"); return; }
+    const { error } = await supabase.from("opportunities").insert({ ...newJob, posted_by: user.id });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Opportunity posted!");
+    setPostOpen(false);
+    // Refresh
+    const { data } = await supabase.from("opportunities").select("*").eq("is_active", true).order("created_at", { ascending: false });
+    setJobs((data || []).map(o => ({ ...o, skills_required: o.skills_required || [] })));
+  };
+
+  const submitReferral = async () => {
+    if (!user || !newReferral.company || !newReferral.alumni_id) { toast.error("Fill required fields"); return; }
+    const { error } = await supabase.from("referral_requests").insert({ requester_id: user.id, alumni_id: newReferral.alumni_id, company: newReferral.company, position: newReferral.position });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Referral request sent!");
+    setReferralOpen(false);
+  };
+
+  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-accent" /></div>;
+
+  const timeAgo = (d: string) => {
+    const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
+    if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+    return `${Math.floor(s / 86400)}d ago`;
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground">Opportunities</h1>
-          <p className="text-muted-foreground text-sm">Jobs, internships, and referral requests</p>
+          <p className="text-muted-foreground text-sm">{jobs.length} active opportunities</p>
         </div>
         <div className="flex gap-2">
           <Dialog open={referralOpen} onOpenChange={setReferralOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm"><Send className="h-4 w-4" /> Request Referral</Button>
-            </DialogTrigger>
+            <DialogTrigger asChild><Button variant="outline" size="sm"><Send className="h-4 w-4" /> Request Referral</Button></DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle className="font-heading">Request a Referral</DialogTitle></DialogHeader>
-              <form onSubmit={(e) => { e.preventDefault(); toast.success("Referral request sent!"); setReferralOpen(false); }} className="space-y-4">
-                <div className="space-y-2"><Label>Company</Label><Input placeholder="e.g. Google" required /></div>
-                <div className="space-y-2"><Label>Position</Label><Input placeholder="e.g. Software Engineer" required /></div>
-                <div className="space-y-2"><Label>Message</Label><Textarea placeholder="Why should this alumnus refer you?" /></div>
-                <Button variant="hero" className="w-full" type="submit">Send Request</Button>
-              </form>
+              <DialogHeader><DialogTitle>Request a Referral</DialogTitle></DialogHeader>
+              <div className="space-y-3 mt-2">
+                <div><Label>Company</Label><Input value={newReferral.company} onChange={(e) => setNewReferral(p => ({ ...p, company: e.target.value }))} /></div>
+                <div><Label>Position</Label><Input value={newReferral.position} onChange={(e) => setNewReferral(p => ({ ...p, position: e.target.value }))} /></div>
+                <div><Label>Alumni User ID</Label><Input value={newReferral.alumni_id} onChange={(e) => setNewReferral(p => ({ ...p, alumni_id: e.target.value }))} placeholder="Paste alumni user ID" /></div>
+                <Button variant="hero" className="w-full" onClick={submitReferral}>Submit Request</Button>
+              </div>
             </DialogContent>
           </Dialog>
           <Dialog open={postOpen} onOpenChange={setPostOpen}>
-            <DialogTrigger asChild>
-              <Button variant="hero" size="sm"><Plus className="h-4 w-4" /> Post Opportunity</Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
-              <DialogHeader><DialogTitle className="font-heading">Post an Opportunity</DialogTitle></DialogHeader>
-              <form onSubmit={(e) => { e.preventDefault(); toast.success("Opportunity posted!"); setPostOpen(false); }} className="space-y-4">
-                <div className="space-y-2"><Label>Title</Label><Input placeholder="Job title" required /></div>
-                <div className="space-y-2"><Label>Company</Label><Input placeholder="Company name" required /></div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label>Location</Label><Input placeholder="City or Remote" /></div>
-                  <div className="space-y-2"><Label>Salary Range</Label><Input placeholder="e.g. ₹20-30 LPA" /></div>
+            <DialogTrigger asChild><Button variant="hero" size="sm"><Plus className="h-4 w-4" /> Post Opportunity</Button></DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Post an Opportunity</DialogTitle></DialogHeader>
+              <div className="space-y-3 mt-2">
+                <div><Label>Title</Label><Input value={newJob.title} onChange={(e) => setNewJob(p => ({ ...p, title: e.target.value }))} /></div>
+                <div><Label>Company</Label><Input value={newJob.company} onChange={(e) => setNewJob(p => ({ ...p, company: e.target.value }))} /></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>Location</Label><Input value={newJob.location} onChange={(e) => setNewJob(p => ({ ...p, location: e.target.value }))} /></div>
+                  <div><Label>Salary Range</Label><Input value={newJob.salary_range} onChange={(e) => setNewJob(p => ({ ...p, salary_range: e.target.value }))} /></div>
                 </div>
-                <div className="space-y-2"><Label>Description</Label><Textarea placeholder="Role details and requirements" /></div>
-                <Button variant="hero" className="w-full" type="submit">Post Opportunity</Button>
-              </form>
+                <div><Label>Description</Label><Textarea value={newJob.description} onChange={(e) => setNewJob(p => ({ ...p, description: e.target.value }))} /></div>
+                <Button variant="hero" className="w-full" onClick={postJob}>Post</Button>
+              </div>
             </DialogContent>
           </Dialog>
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-secondary">
-          <TabsTrigger value="jobs" className="font-heading">Jobs & Internships</TabsTrigger>
-          <TabsTrigger value="referrals" className="font-heading">Referral Requests</TabsTrigger>
-        </TabsList>
+      <Tabs defaultValue="jobs">
+        <TabsList><TabsTrigger value="jobs">Jobs & Internships</TabsTrigger><TabsTrigger value="referrals">My Referrals</TabsTrigger></TabsList>
 
-        <TabsContent value="jobs" className="mt-4">
-          <div className="space-y-3">
-            {mockJobs.map((job, i) => (
-              <motion.div
-                key={job.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.06 }}
-                className="bg-card border border-border rounded-xl p-5 shadow-card hover:shadow-md transition-all"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex gap-4">
-                    <div className="h-12 w-12 rounded-xl bg-accent/10 flex items-center justify-center shrink-0">
-                      <Building2 className="h-6 w-6 text-accent" />
-                    </div>
-                    <div>
-                      <h3 className="font-heading font-semibold text-card-foreground">{job.title}</h3>
-                      <p className="text-sm text-muted-foreground">{job.company} • Posted by {job.postedBy}</p>
-                      <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {job.location}</span>
-                        <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" /> {job.salary}</span>
-                        <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {job.posted}</span>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5 mt-3">
-                        {job.skills.map((s) => (
-                          <Badge key={s} variant="secondary" className="text-[10px] px-2 py-0.5">{s}</Badge>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <Badge className={typeBadge[job.employment_type] || typeBadge["full-time"]}>
-                      {job.employment_type}
-                    </Badge>
-                    <Button variant="hero" size="sm">Apply</Button>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="referrals" className="mt-4">
-          <div className="space-y-3">
-            {mockReferrals.map((ref, i) => (
-              <motion.div
-                key={ref.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.06 }}
-                className="bg-card border border-border rounded-xl p-5 shadow-card flex items-center justify-between"
-              >
+        <TabsContent value="jobs" className="mt-4 space-y-3">
+          {jobs.map((j, i) => (
+            <motion.div key={j.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+              className="bg-card border border-border rounded-xl p-5 shadow-card">
+              <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="font-heading font-semibold text-card-foreground">{ref.position} at {ref.company}</h3>
-                  <p className="text-sm text-muted-foreground">Requested by {ref.requester} • {ref.date}</p>
+                  <h3 className="font-heading font-semibold text-card-foreground">{j.title}</h3>
+                  <p className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
+                    <Building2 className="h-3.5 w-3.5" />{j.company}
+                    {j.location && <><MapPin className="h-3.5 w-3.5 ml-2" />{j.location}</>}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge className={ref.status === "approved" ? "bg-success/10 text-success border-success/20" : "bg-accent/10 text-accent border-accent/20"}>
-                    {ref.status}
-                  </Badge>
-                  {ref.status === "pending" && (
-                    <div className="flex gap-1">
-                      <Button variant="hero" size="sm" onClick={() => toast.success("Referral approved!")}>Approve</Button>
-                      <Button variant="outline" size="sm" onClick={() => toast.info("Referral declined")}>Decline</Button>
-                    </div>
-                  )}
+                  <Badge className={typeBadge[j.employment_type || "full-time"] || typeBadge["full-time"]} variant="outline">{j.employment_type || j.type}</Badge>
+                  <span className="text-xs text-muted-foreground">{timeAgo(j.created_at)}</span>
                 </div>
-              </motion.div>
-            ))}
-          </div>
+              </div>
+              {j.description && <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{j.description}</p>}
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {j.salary_range && <Badge variant="secondary" className="text-[10px]"><DollarSign className="h-2.5 w-2.5" />{j.salary_range}</Badge>}
+                {j.skills_required.slice(0, 4).map(s => <Badge key={s} variant="secondary" className="text-[10px]">{s}</Badge>)}
+              </div>
+            </motion.div>
+          ))}
+          {jobs.length === 0 && <div className="text-center py-12 text-muted-foreground text-sm">No opportunities posted yet.</div>}
+        </TabsContent>
+
+        <TabsContent value="referrals" className="mt-4 space-y-3">
+          {referrals.map((r) => (
+            <div key={r.id} className="bg-card border border-border rounded-xl p-4 shadow-card flex items-center justify-between">
+              <div>
+                <p className="font-heading font-semibold text-card-foreground text-sm">{r.company}</p>
+                <p className="text-xs text-muted-foreground">{r.position || "General"}</p>
+              </div>
+              <Badge variant="outline" className={r.status === "approved" ? "text-success" : r.status === "rejected" ? "text-destructive" : "text-warning"}>{r.status}</Badge>
+            </div>
+          ))}
+          {referrals.length === 0 && <div className="text-center py-12 text-muted-foreground text-sm">No referral requests yet.</div>}
         </TabsContent>
       </Tabs>
     </div>
