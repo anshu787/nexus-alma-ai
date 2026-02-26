@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Book, Code2, Key, Shield, Zap, Copy, Check, ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
+import { Book, Code2, Key, Shield, Zap, Copy, Check, ChevronDown, ChevronRight, Users, MessageSquare, Bell, Briefcase, Heart, Link2, Award, Mail, Globe, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,37 +26,31 @@ const methodColors: Record<string, string> = {
 
 const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = [
   {
-    title: "Authentication",
+    title: "Authentication & Health",
     icon: Key,
     endpoints: [
-      {
-        method: "GET", path: "/me", description: "Get current user profile, roles, and email",
-        auth: "jwt", response: `{ "user": { "id": "uuid", "email": "string" }, "profile": { ... }, "roles": ["alumni"] }`,
-      },
-      {
-        method: "GET", path: "/health", description: "Health check — verify API is running",
-        auth: "both", response: `{ "status": "ok", "timestamp": "ISO8601", "version": "1.0.0" }`,
-      },
+      { method: "GET", path: "/health", description: "Health check — verify API is running", auth: "both", response: `{ "status": "ok", "timestamp": "ISO8601", "version": "2.0.0" }` },
+      { method: "GET", path: "/me", description: "Get current user profile, roles, and email", auth: "jwt", response: `{ "user": { "id": "uuid", "email": "string" }, "profile": { ... }, "roles": ["alumni"] }` },
     ],
   },
   {
     title: "Profiles",
-    icon: Shield,
+    icon: Users,
     endpoints: [
       {
-        method: "GET", path: "/profiles", description: "List alumni profiles with pagination and search",
+        method: "GET", path: "/profiles", description: "List alumni profiles with pagination, search, and filters",
         auth: "both",
         params: [
           { name: "limit", type: "number", required: false, description: "Results per page (default: 20)" },
           { name: "offset", type: "number", required: false, description: "Pagination offset (default: 0)" },
           { name: "search", type: "string", required: false, description: "Filter by name (partial match)" },
+          { name: "department", type: "string", required: false, description: "Filter by department" },
+          { name: "company", type: "string", required: false, description: "Filter by company" },
+          { name: "is_mentor", type: "boolean", required: false, description: "Filter mentors only (true)" },
         ],
         response: `[{ "user_id": "uuid", "full_name": "string", "company": "string", "skills": ["string"], ... }]`,
       },
-      {
-        method: "GET", path: "/profiles/:userId", description: "Get a single profile by user ID",
-        auth: "both", response: `{ "user_id": "uuid", "full_name": "string", ... }`,
-      },
+      { method: "GET", path: "/profiles/:userId", description: "Get a single profile by user ID", auth: "both", response: `{ "user_id": "uuid", "full_name": "string", ... }` },
       {
         method: "PUT", path: "/profiles/:userId", description: "Update own profile (JWT required)",
         auth: "jwt",
@@ -65,6 +59,7 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
           { name: "bio", type: "string", required: false, description: "Bio text" },
           { name: "company", type: "string", required: false, description: "Current company" },
           { name: "skills", type: "string[]", required: false, description: "Skills array" },
+          { name: "location", type: "string", required: false, description: "Location" },
         ],
         response: `{ "user_id": "uuid", "full_name": "string", ... }`,
       },
@@ -83,6 +78,7 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
         ],
         response: `[{ "id": "uuid", "content": "string", "user_id": "uuid", "likes_count": 0, ... }]`,
       },
+      { method: "GET", path: "/posts/:id", description: "Get single post details", auth: "both", response: `{ "id": "uuid", "content": "string", ... }` },
       {
         method: "POST", path: "/posts", description: "Create a new post",
         auth: "jwt",
@@ -95,10 +91,7 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
       { method: "DELETE", path: "/posts/:id", description: "Delete own post", auth: "jwt", response: `{ "success": true }` },
       { method: "POST", path: "/posts/:id/likes", description: "Like a post", auth: "jwt", response: `{ "id": "uuid", "post_id": "uuid", ... }` },
       { method: "DELETE", path: "/posts/:id/likes", description: "Unlike a post", auth: "jwt", response: `{ "success": true }` },
-      {
-        method: "GET", path: "/posts/:id/comments", description: "Get comments for a post",
-        auth: "both", response: `[{ "id": "uuid", "content": "string", "user_id": "uuid", ... }]`,
-      },
+      { method: "GET", path: "/posts/:id/comments", description: "Get comments for a post", auth: "both", response: `[{ "id": "uuid", "content": "string", ... }]` },
       {
         method: "POST", path: "/posts/:id/comments", description: "Add a comment to a post",
         auth: "jwt",
@@ -114,7 +107,10 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
       {
         method: "GET", path: "/events", description: "List upcoming events",
         auth: "both",
-        params: [{ name: "limit", type: "number", required: false, description: "Max results (default: 20)" }],
+        params: [
+          { name: "limit", type: "number", required: false, description: "Max results (default: 20)" },
+          { name: "type", type: "string", required: false, description: "Filter by event_type" },
+        ],
         response: `[{ "id": "uuid", "title": "string", "start_date": "ISO8601", ... }]`,
       },
       { method: "GET", path: "/events/:id", description: "Get event details", auth: "both", response: `{ "id": "uuid", "title": "string", ... }` },
@@ -126,21 +122,19 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
           { name: "start_date", type: "ISO8601", required: true, description: "Start date/time" },
           { name: "description", type: "string", required: false, description: "Event description" },
           { name: "location", type: "string", required: false, description: "Event location" },
+          { name: "is_virtual", type: "boolean", required: false, description: "Is virtual event" },
+          { name: "virtual_link", type: "string", required: false, description: "Virtual meeting link" },
         ],
         response: `{ "id": "uuid", "title": "string", ... }`,
       },
-      {
-        method: "POST", path: "/events/:id/rsvp", description: "RSVP to an event",
-        auth: "jwt",
-        body: [{ name: "status", type: "string", required: false, description: "'going' (default), 'maybe', 'not_going'" }],
-        response: `{ "id": "uuid", "event_id": "uuid", ... }`,
-      },
+      { method: "POST", path: "/events/:id/rsvp", description: "RSVP to an event", auth: "jwt", body: [{ name: "status", type: "string", required: false, description: "'going', 'maybe', 'not_going'" }], response: `{ "id": "uuid", "event_id": "uuid", ... }` },
       { method: "DELETE", path: "/events/:id/rsvp", description: "Cancel RSVP", auth: "jwt", response: `{ "success": true }` },
+      { method: "GET", path: "/events/:id/attendees", description: "List event RSVPs/attendees", auth: "both", response: `[{ "id": "uuid", "user_id": "uuid", "status": "going", ... }]` },
     ],
   },
   {
     title: "Messages",
-    icon: Code2,
+    icon: MessageSquare,
     endpoints: [
       {
         method: "GET", path: "/messages", description: "Get messages (optionally filtered by partner)",
@@ -162,7 +156,7 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
   },
   {
     title: "Notifications",
-    icon: Zap,
+    icon: Bell,
     endpoints: [
       {
         method: "GET", path: "/notifications", description: "Get user notifications",
@@ -178,7 +172,7 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
   },
   {
     title: "Opportunities",
-    icon: Zap,
+    icon: Briefcase,
     endpoints: [
       {
         method: "GET", path: "/opportunities", description: "List active job/internship opportunities",
@@ -186,9 +180,11 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
         params: [
           { name: "limit", type: "number", required: false, description: "Max results (default: 20)" },
           { name: "type", type: "string", required: false, description: "Filter by type: 'job', 'internship', 'mentorship'" },
+          { name: "search", type: "string", required: false, description: "Search by title" },
         ],
-        response: `[{ "id": "uuid", "title": "string", "company": "string", ... }]`,
+        response: `[{ "id": "uuid", "title": "string", "company": "string", "apply_url": "string", ... }]`,
       },
+      { method: "GET", path: "/opportunities/:id", description: "Get opportunity details", auth: "both", response: `{ "id": "uuid", "title": "string", ... }` },
       {
         method: "POST", path: "/opportunities", description: "Post a new opportunity",
         auth: "jwt",
@@ -197,20 +193,164 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
           { name: "company", type: "string", required: true, description: "Company name" },
           { name: "description", type: "string", required: false, description: "Job description" },
           { name: "location", type: "string", required: false, description: "Location" },
+          { name: "apply_url", type: "string", required: false, description: "Application URL" },
+          { name: "salary_range", type: "string", required: false, description: "Salary range" },
+          { name: "type", type: "string", required: false, description: "'job', 'internship', 'mentorship'" },
         ],
         response: `{ "id": "uuid", "title": "string", ... }`,
+      },
+      { method: "PUT", path: "/opportunities/:id", description: "Update an opportunity", auth: "jwt", body: [{ name: "title", type: "string", required: false, description: "Updated title" }], response: `{ "id": "uuid", ... }` },
+    ],
+  },
+  {
+    title: "Campaigns & Donations",
+    icon: Heart,
+    endpoints: [
+      {
+        method: "GET", path: "/campaigns", description: "List fundraising campaigns",
+        auth: "both",
+        params: [
+          { name: "limit", type: "number", required: false, description: "Max results (default: 20)" },
+          { name: "active", type: "boolean", required: false, description: "Filter active only" },
+        ],
+        response: `[{ "id": "uuid", "title": "string", "goal_amount": 10000, "raised_amount": 5000, ... }]`,
+      },
+      { method: "GET", path: "/campaigns/:id", description: "Get campaign details", auth: "both", response: `{ "id": "uuid", "title": "string", ... }` },
+      {
+        method: "POST", path: "/campaigns", description: "Create a fundraising campaign (admin)",
+        auth: "jwt",
+        body: [
+          { name: "title", type: "string", required: true, description: "Campaign title" },
+          { name: "goal_amount", type: "number", required: false, description: "Fundraising goal" },
+          { name: "description", type: "string", required: false, description: "Campaign description" },
+        ],
+        response: `{ "id": "uuid", "title": "string", ... }`,
+      },
+      { method: "PUT", path: "/campaigns/:id", description: "Update a campaign", auth: "jwt", response: `{ "id": "uuid", ... }` },
+      { method: "GET", path: "/campaigns/:id/donations", description: "List donations for a campaign", auth: "both", response: `[{ "id": "uuid", "amount": 100, ... }]` },
+      {
+        method: "POST", path: "/campaigns/:id/donations", description: "Make a donation to a campaign",
+        auth: "jwt",
+        body: [
+          { name: "amount", type: "number", required: true, description: "Donation amount" },
+          { name: "message", type: "string", required: false, description: "Donation message" },
+          { name: "is_anonymous", type: "boolean", required: false, description: "Anonymous donation" },
+        ],
+        response: `{ "id": "uuid", "amount": 100, ... }`,
+      },
+      { method: "GET", path: "/donations", description: "Get own donation history", auth: "jwt", response: `[{ "id": "uuid", "amount": 100, "campaign_id": "uuid", ... }]` },
+    ],
+  },
+  {
+    title: "Connections",
+    icon: Link2,
+    endpoints: [
+      {
+        method: "GET", path: "/connections", description: "List user's connections",
+        auth: "jwt",
+        params: [{ name: "status", type: "string", required: false, description: "Filter by status: 'pending', 'accepted', 'rejected'" }],
+        response: `[{ "id": "uuid", "source_user_id": "uuid", "target_user_id": "uuid", "status": "accepted", ... }]`,
+      },
+      {
+        method: "POST", path: "/connections", description: "Send a connection request",
+        auth: "jwt",
+        body: [
+          { name: "target_user_id", type: "uuid", required: true, description: "User to connect with" },
+          { name: "relation_type", type: "string", required: false, description: "'connection', 'mentor', 'referral'" },
+        ],
+        response: `{ "id": "uuid", "status": "pending", ... }`,
+      },
+      { method: "PUT", path: "/connections/:id", description: "Accept/reject connection", auth: "jwt", body: [{ name: "status", type: "string", required: true, description: "'accepted' or 'rejected'" }], response: `{ "id": "uuid", "status": "accepted", ... }` },
+      { method: "DELETE", path: "/connections/:id", description: "Remove a connection", auth: "jwt", response: `{ "success": true }` },
+    ],
+  },
+  {
+    title: "Forum",
+    icon: MessageSquare,
+    endpoints: [
+      {
+        method: "GET", path: "/forum", description: "List forum posts",
+        auth: "both",
+        params: [
+          { name: "limit", type: "number", required: false, description: "Results per page (default: 20)" },
+          { name: "offset", type: "number", required: false, description: "Pagination offset" },
+          { name: "category", type: "string", required: false, description: "Filter by category" },
+        ],
+        response: `[{ "id": "uuid", "title": "string", "category": "general", "replies_count": 5, ... }]`,
+      },
+      { method: "GET", path: "/forum/:id", description: "Get forum post details", auth: "both", response: `{ "id": "uuid", "title": "string", ... }` },
+      {
+        method: "POST", path: "/forum", description: "Create a forum post",
+        auth: "jwt",
+        body: [
+          { name: "title", type: "string", required: true, description: "Post title" },
+          { name: "content", type: "string", required: true, description: "Post content" },
+          { name: "category", type: "string", required: false, description: "Category (default: 'general')" },
+          { name: "tags", type: "string[]", required: false, description: "Tags array" },
+        ],
+        response: `{ "id": "uuid", "title": "string", ... }`,
+      },
+      { method: "PUT", path: "/forum/:id", description: "Update own forum post", auth: "jwt", response: `{ "id": "uuid", ... }` },
+      { method: "DELETE", path: "/forum/:id", description: "Delete own forum post", auth: "jwt", response: `{ "success": true }` },
+      { method: "GET", path: "/forum/:id/replies", description: "Get replies for a forum post", auth: "both", response: `[{ "id": "uuid", "content": "string", ... }]` },
+      {
+        method: "POST", path: "/forum/:id/replies", description: "Reply to a forum post",
+        auth: "jwt",
+        body: [{ name: "content", type: "string", required: true, description: "Reply content" }],
+        response: `{ "id": "uuid", "content": "string", ... }`,
       },
     ],
   },
   {
-    title: "Institutions & Stories & Referrals",
-    icon: Book,
+    title: "Success Stories",
+    icon: Star,
     endpoints: [
-      { method: "GET", path: "/institutions", description: "List all institutions", auth: "both", response: `[{ "id": "uuid", "name": "string", ... }]` },
+      {
+        method: "GET", path: "/success-stories", description: "List success stories",
+        auth: "both",
+        params: [
+          { name: "limit", type: "number", required: false, description: "Max results (default: 20)" },
+          { name: "featured", type: "boolean", required: false, description: "Filter featured only" },
+        ],
+        response: `[{ "id": "uuid", "title": "string", "content": "string", "is_featured": false, ... }]`,
+      },
+      { method: "GET", path: "/success-stories/:id", description: "Get story details", auth: "both", response: `{ "id": "uuid", "title": "string", ... }` },
+      {
+        method: "POST", path: "/success-stories", description: "Submit a success story",
+        auth: "jwt",
+        body: [
+          { name: "title", type: "string", required: true, description: "Story title" },
+          { name: "content", type: "string", required: true, description: "Story content" },
+          { name: "tags", type: "string[]", required: false, description: "Tags" },
+          { name: "image_url", type: "string", required: false, description: "Image URL" },
+        ],
+        response: `{ "id": "uuid", "title": "string", ... }`,
+      },
+      { method: "PUT", path: "/success-stories/:id", description: "Update a success story", auth: "jwt", response: `{ "id": "uuid", ... }` },
+    ],
+  },
+  {
+    title: "Institutions",
+    icon: Globe,
+    endpoints: [
+      { method: "GET", path: "/institutions", description: "List all institutions", auth: "both", response: `[{ "id": "uuid", "name": "string", "slug": "string", ... }]` },
       { method: "GET", path: "/institutions/:id", description: "Get institution details", auth: "both", response: `{ "id": "uuid", "name": "string", ... }` },
-      { method: "GET", path: "/stories", description: "List active stories", auth: "both", response: `[{ "id": "uuid", "content": "string", ... }]` },
-      { method: "POST", path: "/stories", description: "Create a story (expires in 24h)", auth: "jwt", body: [{ name: "content", type: "string", required: false, description: "Story text" }], response: `{ "id": "uuid", ... }` },
-      { method: "GET", path: "/referrals", description: "List referral requests", auth: "jwt", response: `[{ "id": "uuid", "company": "string", ... }]` },
+    ],
+  },
+  {
+    title: "Stories (24h Ephemeral)",
+    icon: Zap,
+    endpoints: [
+      { method: "GET", path: "/stories", description: "List active stories (not expired)", auth: "both", response: `[{ "id": "uuid", "content": "string", "expires_at": "ISO8601", ... }]` },
+      { method: "POST", path: "/stories", description: "Create a story (expires in 24h)", auth: "jwt", body: [{ name: "content", type: "string", required: false, description: "Story text" }, { name: "image_url", type: "string", required: false, description: "Image URL" }], response: `{ "id": "uuid", ... }` },
+      { method: "DELETE", path: "/stories/:id", description: "Delete own story", auth: "jwt", response: `{ "success": true }` },
+    ],
+  },
+  {
+    title: "Referrals",
+    icon: Shield,
+    endpoints: [
+      { method: "GET", path: "/referrals", description: "List referral requests", auth: "jwt", response: `[{ "id": "uuid", "company": "string", "status": "pending", ... }]` },
       {
         method: "POST", path: "/referrals", description: "Create referral request",
         auth: "jwt",
@@ -223,6 +363,59 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
         response: `{ "id": "uuid", ... }`,
       },
       { method: "PUT", path: "/referrals/:id", description: "Update referral status", auth: "jwt", body: [{ name: "status", type: "string", required: true, description: "'accepted', 'rejected', 'pending'" }], response: `{ "id": "uuid", ... }` },
+    ],
+  },
+  {
+    title: "Verification",
+    icon: Shield,
+    endpoints: [
+      { method: "GET", path: "/verification", description: "Get own verification requests", auth: "jwt", response: `[{ "id": "uuid", "status": "pending", "verification_type": "string", ... }]` },
+      {
+        method: "POST", path: "/verification", description: "Submit a verification request",
+        auth: "jwt",
+        body: [
+          { name: "verification_type", type: "string", required: true, description: "Type: 'document', 'linkedin', 'email'" },
+          { name: "verification_data", type: "object", required: false, description: "Verification metadata" },
+        ],
+        response: `{ "id": "uuid", "status": "pending", ... }`,
+      },
+    ],
+  },
+  {
+    title: "Leaderboard",
+    icon: Award,
+    endpoints: [
+      {
+        method: "GET", path: "/leaderboard", description: "Get top users by engagement score",
+        auth: "both",
+        params: [{ name: "limit", type: "number", required: false, description: "Max results (default: 20)" }],
+        response: `[{ "user_id": "uuid", "full_name": "string", "engagement_score": 500, ... }]`,
+      },
+    ],
+  },
+  {
+    title: "Mailing Campaigns (Admin)",
+    icon: Mail,
+    endpoints: [
+      { method: "GET", path: "/mailing-campaigns", description: "List mailing campaigns (admin only)", auth: "jwt", response: `[{ "id": "uuid", "title": "string", "status": "draft", ... }]` },
+      {
+        method: "POST", path: "/mailing-campaigns", description: "Create a mailing campaign",
+        auth: "jwt",
+        body: [
+          { name: "title", type: "string", required: true, description: "Campaign title" },
+          { name: "message", type: "string", required: true, description: "Email message body" },
+          { name: "segment_filters", type: "object", required: false, description: "Audience filters" },
+        ],
+        response: `{ "id": "uuid", "title": "string", ... }`,
+      },
+      { method: "PUT", path: "/mailing-campaigns/:id", description: "Update a mailing campaign", auth: "jwt", response: `{ "id": "uuid", ... }` },
+    ],
+  },
+  {
+    title: "Roles",
+    icon: Shield,
+    endpoints: [
+      { method: "GET", path: "/roles/:userId", description: "Get roles for a user (admin or self)", auth: "jwt", response: `[{ "id": "uuid", "user_id": "uuid", "role": "alumni" }]` },
     ],
   },
 ];
@@ -249,7 +442,7 @@ function EndpointCard({ ep }: { ep: Endpoint }) {
           {ep.method}
         </Badge>
         <code className="text-sm font-mono text-card-foreground flex-1">{ep.path}</code>
-        <span className="text-xs text-muted-foreground hidden sm:block">{ep.description}</span>
+        <span className="text-xs text-muted-foreground hidden sm:block max-w-[200px] truncate">{ep.description}</span>
         <Badge variant="outline" className="text-[10px]">{ep.auth === "jwt" ? "JWT" : ep.auth === "api-key" ? "API Key" : "JWT / API Key"}</Badge>
         {open ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
       </button>
@@ -263,7 +456,7 @@ function EndpointCard({ ep }: { ep: Endpoint }) {
               <h4 className="text-xs font-semibold text-foreground mb-2">Query Parameters</h4>
               <div className="space-y-1">
                 {ep.params.map((p) => (
-                  <div key={p.name} className="flex items-center gap-2 text-xs">
+                  <div key={p.name} className="flex items-center gap-2 text-xs flex-wrap">
                     <code className="font-mono text-accent">{p.name}</code>
                     <span className="text-muted-foreground">{p.type}</span>
                     {p.required && <Badge variant="destructive" className="text-[9px] h-4">required</Badge>}
@@ -279,7 +472,7 @@ function EndpointCard({ ep }: { ep: Endpoint }) {
               <h4 className="text-xs font-semibold text-foreground mb-2">Request Body (JSON)</h4>
               <div className="space-y-1">
                 {ep.body.map((b) => (
-                  <div key={b.name} className="flex items-center gap-2 text-xs">
+                  <div key={b.name} className="flex items-center gap-2 text-xs flex-wrap">
                     <code className="font-mono text-accent">{b.name}</code>
                     <span className="text-muted-foreground">{b.type}</span>
                     {b.required && <Badge variant="destructive" className="text-[9px] h-4">required</Badge>}
@@ -309,6 +502,20 @@ function EndpointCard({ ep }: { ep: Endpoint }) {
 }
 
 export default function ApiDocsPage() {
+  const [searchQuery, setSearchQuery] = useState("");
+  
+  const filteredSections = searchQuery
+    ? sections.map(s => ({
+        ...s,
+        endpoints: s.endpoints.filter(ep =>
+          ep.path.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          ep.description.toLowerCase().includes(searchQuery.toLowerCase())
+        ),
+      })).filter(s => s.endpoints.length > 0)
+    : sections;
+
+  const totalEndpoints = sections.reduce((sum, s) => sum + s.endpoints.length, 0);
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-5xl mx-auto px-6 py-12">
@@ -318,8 +525,9 @@ export default function ApiDocsPage() {
               <Book className="h-5 w-5 text-accent" />
             </div>
             <h1 className="text-3xl font-heading font-bold text-foreground">API Documentation</h1>
+            <Badge variant="outline" className="ml-2">{totalEndpoints} endpoints</Badge>
           </div>
-          <p className="text-muted-foreground text-sm mt-1">REST API reference for mobile app and third-party integrations</p>
+          <p className="text-muted-foreground text-sm mt-1">Complete REST API reference for mobile apps and third-party integrations</p>
         </motion.div>
 
         {/* Auth section */}
@@ -360,12 +568,24 @@ export default function ApiDocsPage() {
           <p className="text-xs text-muted-foreground mt-2">All endpoints are relative to this base URL. Rate limit headers (<code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code>, <code>X-RateLimit-Reset</code>) are included in every response.</p>
         </motion.div>
 
+        {/* Search */}
+        <div className="mb-6">
+          <input
+            type="text"
+            placeholder="Search endpoints... (e.g. /campaigns, donations, forum)"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-lg border border-border bg-card text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30"
+          />
+        </div>
+
         {/* Endpoint sections */}
         <div className="space-y-8">
-          {sections.map((section, si) => (
-            <motion.div key={section.title} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 + si * 0.05 }}>
+          {filteredSections.map((section, si) => (
+            <motion.div key={section.title} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 + si * 0.03 }}>
               <h2 className="font-heading font-semibold text-foreground text-lg mb-3 flex items-center gap-2">
                 <section.icon className="h-5 w-5 text-accent" /> {section.title}
+                <Badge variant="secondary" className="text-[10px]">{section.endpoints.length}</Badge>
               </h2>
               <div className="space-y-2">
                 {section.endpoints.map((ep) => (
