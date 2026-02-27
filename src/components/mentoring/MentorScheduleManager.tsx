@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Plus, Calendar, Clock, Trash2, Loader2, Video, Users } from "lucide-react";
+import { Plus, Calendar, Clock, Trash2, Loader2, Video, Users, LayoutGrid, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
+import MentorCalendarView from "./MentorCalendarView";
 
 interface AvailabilitySlot {
   id: string;
@@ -95,6 +96,8 @@ export default function MentorScheduleManager() {
     fetchSlots();
   };
 
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("calendar");
+
   if (loading) return <div className="flex items-center justify-center h-32"><Loader2 className="h-6 w-6 animate-spin text-accent" /></div>;
 
   const upcoming = slots.filter(s => s.slot_date >= new Date().toISOString().split("T")[0]);
@@ -106,10 +109,19 @@ export default function MentorScheduleManager() {
         <h2 className="font-heading font-semibold text-foreground flex items-center gap-2">
           <Calendar className="h-5 w-5 text-accent" /> My Availability Schedule
         </h2>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="hero" size="sm"><Plus className="h-4 w-4" /> Add Slot</Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <div className="flex border border-border rounded-lg overflow-hidden">
+            <Button variant={viewMode === "calendar" ? "default" : "ghost"} size="sm" className="rounded-none h-8 px-2" onClick={() => setViewMode("calendar")}>
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant={viewMode === "list" ? "default" : "ghost"} size="sm" className="rounded-none h-8 px-2" onClick={() => setViewMode("list")}>
+              <List className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="hero" size="sm"><Plus className="h-4 w-4" /> Add Slot</Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="font-heading">Add Availability Slot</DialogTitle>
@@ -147,15 +159,22 @@ export default function MentorScheduleManager() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
-      {upcoming.length === 0 && past.length === 0 && (
+      {/* Calendar View */}
+      {viewMode === "calendar" && (
+        <MentorCalendarView slots={slots} />
+      )}
+
+      {/* List View */}
+      {viewMode === "list" && upcoming.length === 0 && past.length === 0 && (
         <div className="text-center py-8 text-muted-foreground text-sm">
           No availability slots yet. Add your first slot to start accepting mentoring sessions.
         </div>
       )}
 
-      {upcoming.length > 0 && (
+      {viewMode === "list" && upcoming.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Upcoming ({upcoming.length})</p>
           {upcoming.map((slot, i) => (
@@ -187,7 +206,7 @@ export default function MentorScheduleManager() {
         </div>
       )}
 
-      {past.length > 0 && (
+      {viewMode === "list" && past.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Past ({past.length})</p>
           {past.map(slot => (
