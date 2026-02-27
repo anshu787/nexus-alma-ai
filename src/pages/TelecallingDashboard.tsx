@@ -4,8 +4,9 @@ import {
   Phone, PhoneCall, PhoneOff, PhoneIncoming, PhoneOutgoing,
   Activity, Clock, Users, Shield, Loader2, Copy, RefreshCw,
   MessageSquare, UserCog, Calendar, Mic, BarChart3, CheckCircle2,
-  AlertTriangle, Key
+  AlertTriangle, Key, Send
 } from "lucide-react";
+import OutboundScheduler from "@/components/telecalling/OutboundScheduler";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -297,6 +298,7 @@ export default function TelecallingDashboard() {
       <Tabs defaultValue="sessions" className="space-y-4">
         <TabsList>
           <TabsTrigger value="sessions">Call Sessions</TabsTrigger>
+          <TabsTrigger value="outbound">Outbound Calls</TabsTrigger>
           <TabsTrigger value="intents">Intent Analytics</TabsTrigger>
         </TabsList>
 
@@ -397,6 +399,10 @@ export default function TelecallingDashboard() {
               );
             })
           )}
+        </TabsContent>
+        {/* Outbound Scheduling */}
+        <TabsContent value="outbound">
+          <OutboundScheduler />
         </TabsContent>
 
         {/* Intent Analytics */}
