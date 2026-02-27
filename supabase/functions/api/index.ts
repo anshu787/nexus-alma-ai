@@ -144,7 +144,26 @@ Deno.serve(async (req) => {
       }
     }
 
-    return json({ error: "Not Found", auth_endpoints: ["POST /auth/login", "POST /auth/signup", "POST /auth/forgot-password"] }, 404);
+    if (method === "POST" && resourceId === "change-password") {
+      try {
+        const body = await req.json();
+        const { email, password, new_password } = body;
+        if (!email || !password) return json({ error: "Email and current password are required" }, 400);
+        if (!new_password || new_password.length < 6) return json({ error: "New password must be at least 6 characters" }, 400);
+        // Verify current credentials
+        const authResult = await authWithEmailPassword(email, password);
+        if (authResult.error || !authResult.user) return json({ error: authResult.error || "Invalid current credentials" }, 401);
+        // Update password using admin client
+        const adminClient = getAdminClient();
+        const { error: updateError } = await adminClient.auth.admin.updateUserById(authResult.user.id, { password: new_password });
+        if (updateError) return json({ error: updateError.message }, 400);
+        return json({ success: true, message: "Password updated successfully" });
+      } catch (e) {
+        return json({ error: e.message }, 400);
+      }
+    }
+
+    return json({ error: "Not Found", auth_endpoints: ["POST /auth/login", "POST /auth/signup", "POST /auth/forgot-password", "POST /auth/change-password"] }, 404);
   }
 
   // ── Health (no auth) ──
