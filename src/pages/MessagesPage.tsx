@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Send, Check, CheckCheck, Search, ArrowLeft, Loader2, Plus, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,9 @@ export default function MessagesPage() {
   const [alumniResults, setAlumniResults] = useState<{ user_id: string; full_name: string; designation: string | null; company: string | null }[]>([]);
   const [searchingAlumni, setSearchingAlumni] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [peerTyping, setPeerTyping] = useState(false);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // Build conversation list from messages table
   const fetchConversations = async () => {
@@ -149,6 +152,40 @@ export default function MessagesPage() {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [user, activeChat]);
+
+  // Typing indicator via broadcast
+  useEffect(() => {
+    if (!user || !activeChat) {
+      setPeerTyping(false);
+      return;
+    }
+    const channelName = [user.id, activeChat].sort().join("-");
+    const ch = supabase.channel(`typing-${channelName}`)
+      .on("broadcast", { event: "typing" }, (payload) => {
+        if (payload.payload?.user_id === activeChat) {
+          setPeerTyping(true);
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = setTimeout(() => setPeerTyping(false), 3000);
+        }
+      })
+      .subscribe();
+    typingChannelRef.current = ch;
+    return () => {
+      supabase.removeChannel(ch);
+      typingChannelRef.current = null;
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      setPeerTyping(false);
+    };
+  }, [user, activeChat]);
+
+  const broadcastTyping = useCallback(() => {
+    if (!user || !typingChannelRef.current) return;
+    typingChannelRef.current.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { user_id: user.id },
+    });
+  }, [user]);
 
   const sendMessage = async () => {
     if (!messageInput.trim() || !activeChat || !user) return;
@@ -316,8 +353,21 @@ export default function MessagesPage() {
               ))}
             </div>
 
+            {peerTyping && (
+              <div className="px-4 py-1.5 border-t border-border">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-0.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce [animation-delay:0ms]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce [animation-delay:150ms]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce [animation-delay:300ms]" />
+                  </div>
+                  <span className="text-xs text-muted-foreground">{activePeer.full_name.split(" ")[0]} is typing...</span>
+                </div>
+              </div>
+            )}
+
             <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} className="border-t border-border p-3 flex gap-2">
-              <Input value={messageInput} onChange={(e) => setMessageInput(e.target.value)} placeholder="Type a message..." className="flex-1" />
+              <Input value={messageInput} onChange={(e) => { setMessageInput(e.target.value); broadcastTyping(); }} placeholder="Type a message..." className="flex-1" />
               <Button variant="hero" size="icon" type="submit" disabled={!messageInput.trim()}><Send className="h-4 w-4" /></Button>
             </form>
           </>
