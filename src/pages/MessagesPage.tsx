@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { usePresence } from "@/hooks/usePresence";
 
 interface ConversationPeer {
   user_id: string;
@@ -41,6 +42,7 @@ function timeLabel(d: string) {
 
 export default function MessagesPage() {
   const { user } = useAuth();
+  const { isOnline } = usePresence(user?.id);
   const [peers, setPeers] = useState<ConversationPeer[]>([]);
   const [activeChat, setActiveChat] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -308,7 +310,10 @@ export default function MessagesPage() {
           {filteredPeers.map((c) => (
             <button key={c.user_id} onClick={() => setActiveChat(c.user_id)}
               className={`w-full flex items-center gap-3 px-3 py-3 hover:bg-secondary/50 transition-colors text-left ${activeChat === c.user_id ? "bg-secondary" : ""}`}>
-              <Avatar className="h-10 w-10"><AvatarFallback className="bg-accent/10 text-accent font-heading text-sm">{getInitials(c.full_name)}</AvatarFallback></Avatar>
+              <div className="relative">
+                <Avatar className="h-10 w-10"><AvatarFallback className="bg-accent/10 text-accent font-heading text-sm">{getInitials(c.full_name)}</AvatarFallback></Avatar>
+                <span className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-card ${isOnline(c.user_id) ? "bg-green-500" : "bg-muted-foreground/40"}`} />
+              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-card-foreground truncate">{c.full_name}</span>
@@ -332,8 +337,14 @@ export default function MessagesPage() {
               <Button variant="ghost" size="icon" className="sm:hidden h-8 w-8" onClick={() => setActiveChat(null)}>
                 <ArrowLeft className="h-4 w-4" />
               </Button>
-              <Avatar className="h-8 w-8"><AvatarFallback className="bg-accent/10 text-accent font-heading text-xs">{getInitials(activePeer.full_name)}</AvatarFallback></Avatar>
-              <p className="text-sm font-medium text-card-foreground">{activePeer.full_name}</p>
+              <div className="relative">
+                <Avatar className="h-8 w-8"><AvatarFallback className="bg-accent/10 text-accent font-heading text-xs">{getInitials(activePeer.full_name)}</AvatarFallback></Avatar>
+                <span className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-card ${isOnline(activePeer.user_id) ? "bg-green-500" : "bg-muted-foreground/40"}`} />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-card-foreground">{activePeer.full_name}</p>
+                <p className="text-[10px] text-muted-foreground">{isOnline(activePeer.user_id) ? "Online" : "Offline"}</p>
+              </div>
             </div>
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
