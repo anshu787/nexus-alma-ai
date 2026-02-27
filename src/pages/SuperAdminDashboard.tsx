@@ -155,6 +155,11 @@ export default function SuperAdminDashboard() {
   const [csvProgress, setCsvProgress] = useState({ done: 0, total: 0, errors: [] as string[] });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Seed data state
+  const [seeding, setSeeding] = useState(false);
+  const [seedProgress, setSeedProgress] = useState("");
+  const [seedLog, setSeedLog] = useState<string[]>([]);
+
   // Check role
   useEffect(() => {
     if (!user) return;
@@ -587,6 +592,7 @@ export default function SuperAdminDashboard() {
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="moderation">Moderation</TabsTrigger>
           <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
+          <TabsTrigger value="seeddata">Seed Data</TabsTrigger>
         </TabsList>
 
         {/* User Roles Tab */}
@@ -878,6 +884,104 @@ export default function SuperAdminDashboard() {
                   <span className="text-sm font-heading font-bold text-accent">{p.revenue}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Seed Data Tab */}
+        <TabsContent value="seeddata" className="space-y-4">
+          <div className="bg-card border border-border rounded-xl p-6 shadow-card space-y-6">
+            <div>
+              <h2 className="font-heading font-semibold text-card-foreground text-lg flex items-center gap-2">
+                <Activity className="h-5 w-5 text-accent" /> Synthetic Data Generator
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Generate realistic test data: 200 alumni, 400 students, 50 institution admins, 50 moderators, 50 mentors, plus posts, events, opportunities, and more.
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="bg-secondary rounded-xl p-4 space-y-3">
+                <h3 className="font-heading font-semibold text-sm text-foreground">Step 1: Create Users (750 total)</h3>
+                <p className="text-xs text-muted-foreground">Creates 30 batches of 25 users each across all roles.</p>
+                <Button
+                  variant="hero"
+                  className="w-full"
+                  disabled={seeding}
+                  onClick={async () => {
+                    setSeeding(true);
+                    setSeedLog([]);
+                    const totalBatches = 30;
+                    for (let b = 0; b < totalBatches; b++) {
+                      setSeedProgress(`Creating users batch ${b + 1}/${totalBatches}...`);
+                      try {
+                        const { data, error } = await supabase.functions.invoke("bulk-create-users", { body: { batch: b } });
+                        if (error) throw error;
+                        setSeedLog(prev => [...prev, `Batch ${b}: ${data?.role} — ${data?.created || 0} created`]);
+                      } catch (e: any) {
+                        setSeedLog(prev => [...prev, `Batch ${b}: ERROR — ${e.message}`]);
+                      }
+                    }
+                    setSeedProgress("Users seeding complete!");
+                    setSeeding(false);
+                    fetchUsersWithRoles();
+                    toast.success("All user batches processed!");
+                  }}
+                >
+                  {seeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+                  {seeding ? "Seeding..." : "Seed Users"}
+                </Button>
+              </div>
+
+              <div className="bg-secondary rounded-xl p-4 space-y-3">
+                <h3 className="font-heading font-semibold text-sm text-foreground">Step 2: Seed Content</h3>
+                <p className="text-xs text-muted-foreground">Creates posts, events, opportunities, forum posts, campaigns, referrals, messages, and more.</p>
+                <Button
+                  variant="hero"
+                  className="w-full"
+                  disabled={seeding}
+                  onClick={async () => {
+                    setSeeding(true);
+                    setSeedProgress("Seeding all content...");
+                    setSeedLog([]);
+                    try {
+                      const { data, error } = await supabase.functions.invoke("seed-content", { body: { type: "all" } });
+                      if (error) throw error;
+                      if (data?.results) {
+                        const entries = Object.entries(data.results);
+                        setSeedLog(entries.map(([key, val]) => `${key}: ${val} created`));
+                      }
+                      setSeedProgress("Content seeding complete!");
+                      toast.success("All content seeded successfully!");
+                    } catch (e: any) {
+                      setSeedLog(prev => [...prev, `ERROR: ${e.message}`]);
+                      toast.error("Content seeding failed");
+                    }
+                    setSeeding(false);
+                  }}
+                >
+                  {seeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                  {seeding ? "Seeding..." : "Seed Content"}
+                </Button>
+              </div>
+            </div>
+
+            {seedProgress && (
+              <div className="bg-accent/5 border border-accent/20 rounded-lg p-3">
+                <p className="text-sm font-medium text-accent">{seedProgress}</p>
+              </div>
+            )}
+
+            {seedLog.length > 0 && (
+              <div className="bg-card border border-border rounded-lg max-h-64 overflow-y-auto p-3 space-y-1">
+                {seedLog.map((log, i) => (
+                  <p key={i} className={`text-xs font-mono ${log.includes("ERROR") ? "text-destructive" : "text-muted-foreground"}`}>{log}</p>
+                ))}
+              </div>
+            )}
+
+            <div className="bg-warning/5 border border-warning/20 rounded-lg p-3">
+              <p className="text-xs text-warning font-medium">⚠️ Run Step 1 first, then Step 2. Each run adds new data — avoid running multiple times to prevent duplicates.</p>
             </div>
           </div>
         </TabsContent>
