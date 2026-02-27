@@ -30,8 +30,10 @@ interface Referral {
   id: string;
   company: string;
   position: string | null;
+  message: string | null;
   status: string;
   created_at: string;
+  alumni_name?: string;
 }
 
 interface IncomingReferral {
@@ -87,9 +89,16 @@ export default function OpportunitiesPage() {
       setJobs((opps || []).map(o => ({ ...o, skills_required: o.skills_required || [] })));
 
       if (user) {
-        // Sent referrals (by this user)
+        // Sent referrals (by this user) — include alumni name
         const { data: refs } = await supabase.from("referral_requests").select("*").eq("requester_id", user.id).order("created_at", { ascending: false });
-        setReferrals(refs || []);
+        if (refs && refs.length > 0) {
+          const alumniIds = [...new Set(refs.map(r => r.alumni_id))];
+          const { data: alumniProfiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", alumniIds);
+          const alumniNameMap = new Map((alumniProfiles || []).map(p => [p.user_id, p.full_name]));
+          setReferrals(refs.map(r => ({ ...r, alumni_name: alumniNameMap.get(r.alumni_id) || "Alumni" })));
+        } else {
+          setReferrals([]);
+        }
 
         // Incoming referrals (where this user is the alumni)
         const { data: incoming } = await supabase.from("referral_requests").select("*").eq("alumni_id", user.id).order("created_at", { ascending: false });
@@ -148,6 +157,18 @@ export default function OpportunitiesPage() {
     if (!user || !newReferral.company || !selectedAlumni) { toast.error("Fill required fields and select an alumni"); return; }
     const { error } = await supabase.from("referral_requests").insert({ requester_id: user.id, alumni_id: selectedAlumni.user_id, company: newReferral.company, position: newReferral.position });
     if (error) { toast.error(error.message); return; }
+
+    // Send in-app notification to the alumni
+    const { data: requesterProfile } = await supabase.from("profiles").select("full_name").eq("user_id", user.id).single();
+    const requesterName = requesterProfile?.full_name || "Someone";
+    await supabase.from("notifications").insert({
+      user_id: selectedAlumni.user_id,
+      title: "New Referral Request",
+      message: `${requesterName} is requesting a referral at ${newReferral.company}${newReferral.position ? ` for ${newReferral.position}` : ""}.`,
+      type: "referral",
+      link: "/opportunities",
+    });
+
     toast.success("Referral request sent!");
     setReferralOpen(false);
     setSelectedAlumni(null);
@@ -315,12 +336,24 @@ export default function OpportunitiesPage() {
 
         <TabsContent value="referrals" className="mt-4 space-y-3">
           {referrals.map((r) => (
-            <div key={r.id} className="bg-card border border-border rounded-xl p-4 shadow-card flex items-center justify-between">
-              <div>
-                <p className="font-heading font-semibold text-card-foreground text-sm">{r.company}</p>
-                <p className="text-xs text-muted-foreground">{r.position || "General"}</p>
+            <div key={r.id} className="bg-card border border-border rounded-xl p-4 shadow-card">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-heading font-semibold text-card-foreground text-sm">{r.company}</p>
+                  <p className="text-xs text-muted-foreground">{r.position || "General"}</p>
+                  {r.alumni_name && <p className="text-xs text-muted-foreground mt-0.5">To: {r.alumni_name}</p>}
+                </div>
+                <Badge variant="outline" className={r.status === "approved" ? "text-success border-success/20" : r.status === "rejected" ? "text-destructive border-destructive/20" : "text-warning border-warning/20"}>{r.status}</Badge>
               </div>
-              <Badge variant="outline" className={r.status === "approved" ? "text-success" : r.status === "rejected" ? "text-destructive" : "text-warning"}>{r.status}</Badge>
+              {r.message && r.status !== "pending" && (
+                <div className="mt-3 bg-muted rounded-lg p-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                    <MessageSquare className="h-3 w-3 inline mr-1" />
+                    Alumni Response
+                  </p>
+                  <p className="text-sm text-foreground">{r.message}</p>
+                </div>
+              )}
             </div>
           ))}
           {referrals.length === 0 && <div className="text-center py-12 text-muted-foreground text-sm">No referral requests yet.</div>}
