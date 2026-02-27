@@ -87,6 +87,15 @@ export default function TelecallingDashboard() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+
+  const isAdmin = userRoles.includes("super_admin") || userRoles.includes("institution_admin");
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("user_roles").select("role").eq("user_id", user.id)
+      .then(({ data }) => { if (data) setUserRoles(data.map(r => r.role)); });
+  }, [user]);
 
   const fetchSessions = async () => {
     setLoading(true);
@@ -278,30 +287,32 @@ export default function TelecallingDashboard() {
         ))}
       </div>
 
-      {/* Twilio Setup Info */}
-      <div className="bg-card border border-border rounded-xl p-4 shadow-card">
-        <h3 className="font-heading font-semibold text-sm text-card-foreground flex items-center gap-2 mb-2">
-          <Shield className="h-4 w-4 text-accent" /> Twilio Webhook Configuration
-        </h3>
-        <p className="text-xs text-muted-foreground mb-2">
-          Configure your Twilio phone number's voice webhook URL to:
-        </p>
-        <div className="flex items-center gap-2">
-          <code className="bg-secondary px-3 py-2 rounded-lg text-xs text-foreground flex-1 truncate">
-            {webhookUrl}
-          </code>
-          <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(webhookUrl); toast.success("URL copied!"); }}>
-            <Copy className="h-4 w-4" />
-          </Button>
+      {/* Twilio Setup Info - Admin Only */}
+      {isAdmin && (
+        <div className="bg-card border border-border rounded-xl p-4 shadow-card">
+          <h3 className="font-heading font-semibold text-sm text-card-foreground flex items-center gap-2 mb-2">
+            <Shield className="h-4 w-4 text-accent" /> Twilio Webhook Configuration
+          </h3>
+          <p className="text-xs text-muted-foreground mb-2">
+            Configure your Twilio phone number's voice webhook URL to:
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="bg-secondary px-3 py-2 rounded-lg text-xs text-foreground flex-1 truncate">
+              {webhookUrl}
+            </code>
+            <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(webhookUrl); toast.success("URL copied!"); }}>
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       <Tabs defaultValue="sessions" className="space-y-4">
         <TabsList>
           <TabsTrigger value="sessions">Call Sessions</TabsTrigger>
-          <TabsTrigger value="outbound">Outbound Calls</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          <TabsTrigger value="intents">Intent Analytics</TabsTrigger>
+          {isAdmin && <TabsTrigger value="outbound">Outbound Calls</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="analytics">Analytics</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="intents">Intent Analytics</TabsTrigger>}
         </TabsList>
 
         {/* Sessions */}

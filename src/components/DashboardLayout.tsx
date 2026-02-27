@@ -6,7 +6,8 @@ import {
   LayoutDashboard, Users, MessageSquare, Calendar, Briefcase, Brain,
   BarChart3, Settings, Sparkles, ChevronLeft, Bell, Search, LogOut,
   Target, Trophy, Share2, User, Send, Palette, Shield, Check, X, BellRing,
-  ShieldCheck, Award, Heart, TrendingUp, Globe, MessageCircle, DollarSign, Mail, Phone
+  ShieldCheck, Award, Heart, TrendingUp, Globe, MessageCircle, DollarSign, Mail, Phone,
+  ChevronDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -19,38 +20,73 @@ interface NavItem {
   icon: typeof Bell;
   label: string;
   path: string;
-  roles?: string[]; // if set, only these roles see it. If not set, everyone sees it.
+  roles?: string[];
 }
 
-const navItems: NavItem[] = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-  { icon: Users, label: "Directory", path: "/dashboard/directory" },
-  { icon: MessageSquare, label: "Feed", path: "/dashboard/feed" },
-  { icon: Send, label: "Messages", path: "/dashboard/messages" },
-  { icon: Calendar, label: "Events", path: "/dashboard/events" },
-  { icon: Briefcase, label: "Opportunities", path: "/dashboard/opportunities" },
-  { icon: Brain, label: "AI Assistant", path: "/dashboard/ai" },
-  { icon: Target, label: "Skill Gap", path: "/dashboard/skill-gap", roles: ["alumni", "student"] },
-  { icon: Trophy, label: "Leaderboard", path: "/dashboard/leaderboard" },
-  { icon: Share2, label: "Network Graph", path: "/dashboard/network" },
-  { icon: Bell, label: "Notifications", path: "/dashboard/notifications" },
-  { icon: Heart, label: "Mentorship", path: "/dashboard/mentorship" },
-  { icon: Users, label: "Mentor Dashboard", path: "/dashboard/mentor-dashboard", roles: ["alumni", "moderator", "institution_admin"] },
-  { icon: TrendingUp, label: "Career Path", path: "/dashboard/career-path", roles: ["alumni", "student"] },
-  { icon: Award, label: "Success Stories", path: "/dashboard/stories" },
-  { icon: MessageCircle, label: "Career Forum", path: "/dashboard/forum" },
-  { icon: DollarSign, label: "Fundraising", path: "/dashboard/fundraising", roles: ["alumni", "institution_admin"] },
-  { icon: Globe, label: "Global Map", path: "/dashboard/global-map" },
-  { icon: User, label: "My Profile", path: "/dashboard/profile" },
-  { icon: BarChart3, label: "Analytics", path: "/dashboard/analytics" },
-  { icon: BarChart3, label: "Admin Analytics", path: "/dashboard/admin-analytics", roles: ["institution_admin"] },
-  { icon: Mail, label: "Campaigns", path: "/dashboard/campaigns", roles: ["institution_admin"] },
-  { icon: Award, label: "Impact", path: "/dashboard/impact", roles: ["moderator", "institution_admin"] },
-  { icon: ShieldCheck, label: "Verification", path: "/dashboard/verification", roles: ["moderator", "institution_admin"] },
-  { icon: Palette, label: "Branding", path: "/dashboard/branding", roles: ["institution_admin"] },
-  { icon: Shield, label: "Super Admin", path: "/dashboard/admin", roles: ["super_admin"] },
-  { icon: Phone, label: "Telecalling", path: "/dashboard/telecalling", roles: ["super_admin", "institution_admin"] },
-  { icon: Settings, label: "Settings", path: "/dashboard/settings" },
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+const navGroups: NavGroup[] = [
+  {
+    label: "Overview",
+    items: [
+      { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+      { icon: Bell, label: "Notifications", path: "/dashboard/notifications" },
+    ],
+  },
+  {
+    label: "Community",
+    items: [
+      { icon: Users, label: "Directory", path: "/dashboard/directory" },
+      { icon: MessageSquare, label: "Feed", path: "/dashboard/feed" },
+      { icon: Send, label: "Messages", path: "/dashboard/messages" },
+      { icon: Globe, label: "Global Map", path: "/dashboard/global-map" },
+      { icon: Share2, label: "Network Graph", path: "/dashboard/network" },
+      { icon: Award, label: "Success Stories", path: "/dashboard/stories" },
+      { icon: MessageCircle, label: "Career Forum", path: "/dashboard/forum" },
+    ],
+  },
+  {
+    label: "Career & Growth",
+    items: [
+      { icon: Calendar, label: "Events", path: "/dashboard/events" },
+      { icon: Briefcase, label: "Opportunities", path: "/dashboard/opportunities" },
+      { icon: Heart, label: "Mentorship", path: "/dashboard/mentorship" },
+      { icon: Users, label: "Mentor Dashboard", path: "/dashboard/mentor-dashboard", roles: ["alumni", "moderator", "institution_admin"] },
+      { icon: TrendingUp, label: "Career Path", path: "/dashboard/career-path", roles: ["alumni", "student"] },
+      { icon: Target, label: "Skill Gap", path: "/dashboard/skill-gap", roles: ["alumni", "student"] },
+      { icon: DollarSign, label: "Fundraising", path: "/dashboard/fundraising", roles: ["alumni", "institution_admin"] },
+    ],
+  },
+  {
+    label: "Intelligence",
+    items: [
+      { icon: Brain, label: "AI Assistant", path: "/dashboard/ai" },
+      { icon: Trophy, label: "Leaderboard", path: "/dashboard/leaderboard" },
+      { icon: BarChart3, label: "Analytics", path: "/dashboard/analytics" },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
+      { icon: BarChart3, label: "Admin Analytics", path: "/dashboard/admin-analytics", roles: ["institution_admin"] },
+      { icon: Mail, label: "Campaigns", path: "/dashboard/campaigns", roles: ["institution_admin"] },
+      { icon: Award, label: "Impact", path: "/dashboard/impact", roles: ["moderator", "institution_admin"] },
+      { icon: ShieldCheck, label: "Verification", path: "/dashboard/verification", roles: ["moderator", "institution_admin"] },
+      { icon: Palette, label: "Branding", path: "/dashboard/branding", roles: ["institution_admin"] },
+      { icon: Phone, label: "Telecalling", path: "/dashboard/telecalling", roles: ["super_admin", "institution_admin"] },
+      { icon: Shield, label: "Super Admin", path: "/dashboard/admin", roles: ["super_admin"] },
+    ],
+  },
+  {
+    label: "Account",
+    items: [
+      { icon: User, label: "My Profile", path: "/dashboard/profile" },
+      { icon: Settings, label: "Settings", path: "/dashboard/settings" },
+    ],
+  },
 ];
 
 interface Notification {
@@ -86,6 +122,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const dropdownRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -97,9 +134,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     if (!user) return;
     supabase.from("user_roles").select("role").eq("user_id", user.id)
       .then(({ data }) => {
-        if (data) {
-          setUserRoles(data.map((r) => r.role));
-        }
+        if (data) setUserRoles(data.map((r) => r.role));
       });
   }, [user]);
 
@@ -163,16 +198,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     navigate("/");
   };
 
-  // Super admins see everything
   const isSuperAdmin = userRoles.includes("super_admin");
 
-  const visibleNavItems = navItems.filter((item) => {
-    if (!item.roles) return true; // visible to all
-    if (isSuperAdmin) return true; // super admin sees all
-    return item.roles.some((r) => userRoles.includes(r));
-  });
+  const toggleGroup = (label: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [label]: !prev[label] }));
+  };
 
-  // Role label for display
+  const isItemVisible = (item: NavItem) => {
+    if (!item.roles) return true;
+    if (isSuperAdmin) return true;
+    return item.roles.some((r) => userRoles.includes(r));
+  };
+
   const primaryRole = isSuperAdmin ? "Super Admin"
     : userRoles.includes("institution_admin") ? "Institution Admin"
     : userRoles.includes("moderator") ? "Moderator"
@@ -191,7 +228,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           {!collapsed && <span className="font-heading font-bold text-sidebar-foreground text-lg truncate">Alumni<span className="text-sidebar-primary">OS</span></span>}
         </div>
 
-        {/* Role Badge */}
         {!collapsed && (
           <div className="px-4 py-2">
             <Badge variant="outline" className="text-[10px] w-full justify-center">{primaryRole}</Badge>
@@ -199,22 +235,46 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         )}
 
         <nav className="flex-1 py-2 px-2 space-y-1 overflow-y-auto">
-          {visibleNavItems.map((item) => {
-            const active = location.pathname === item.path;
+          {navGroups.map((group) => {
+            const visibleItems = group.items.filter(isItemVisible);
+            if (visibleItems.length === 0) return null;
+            const isGroupCollapsed = collapsedGroups[group.label];
+            const hasActiveItem = visibleItems.some(item => location.pathname === item.path);
+
             return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                  active
-                    ? "bg-sidebar-accent text-sidebar-primary"
-                    : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+              <div key={group.label} className="mb-1">
+                {!collapsed && (
+                  <button
+                    onClick={() => toggleGroup(group.label)}
+                    className="flex items-center justify-between w-full px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40 hover:text-sidebar-foreground/60 transition-colors"
+                  >
+                    {group.label}
+                    <ChevronDown className={cn("h-3 w-3 transition-transform", isGroupCollapsed && "-rotate-90")} />
+                  </button>
                 )}
-              >
-                <item.icon className="h-5 w-5 shrink-0" />
-                {!collapsed && <span className="truncate">{item.label}</span>}
-              </Link>
+                {(!isGroupCollapsed || collapsed) && (
+                  <div className="space-y-0.5">
+                    {visibleItems.map((item) => {
+                      const active = location.pathname === item.path;
+                      return (
+                        <Link
+                          key={item.path}
+                          to={item.path}
+                          className={cn(
+                            "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                            active
+                              ? "bg-sidebar-accent text-sidebar-primary"
+                              : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                          )}
+                        >
+                          <item.icon className="h-4.5 w-4.5 shrink-0" />
+                          {!collapsed && <span className="truncate">{item.label}</span>}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
