@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Book, Code2, Key, Shield, Zap, Copy, Check, ChevronDown, ChevronRight, Users, MessageSquare, Bell, Briefcase, Heart, Link2, Award, Mail, Globe, Star } from "lucide-react";
+import { Book, Code2, Key, Shield, Zap, Copy, Check, ChevronDown, ChevronRight, Users, MessageSquare, Bell, Briefcase, Heart, Link2, Award, Mail, Globe, Star, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -11,7 +11,7 @@ interface Endpoint {
   method: "GET" | "POST" | "PUT" | "DELETE";
   path: string;
   description: string;
-  auth: "jwt" | "api-key" | "both";
+  auth: "credentials" | "api-key" | "both" | "none";
   params?: { name: string; type: string; required: boolean; description: string }[];
   body?: { name: string; type: string; required: boolean; description: string }[];
   response: string;
@@ -26,11 +26,50 @@ const methodColors: Record<string, string> = {
 
 const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = [
   {
-    title: "Authentication & Health",
+    title: "Authentication",
+    icon: Lock,
+    endpoints: [
+      {
+        method: "POST", path: "/auth/login", description: "Login with email and password — returns user profile and roles",
+        auth: "none",
+        body: [
+          { name: "email", type: "string", required: true, description: "User email address" },
+          { name: "password", type: "string", required: true, description: "User password" },
+        ],
+        response: `{ "user": { "id": "uuid", "email": "string" }, "profile": { ... }, "roles": ["alumni"], "message": "Login successful..." }`,
+      },
+      {
+        method: "POST", path: "/auth/signup", description: "Create a new account",
+        auth: "none",
+        body: [
+          { name: "email", type: "string", required: true, description: "User email address" },
+          { name: "password", type: "string", required: true, description: "Password (min 6 chars)" },
+          { name: "full_name", type: "string", required: true, description: "Full display name" },
+        ],
+        response: `{ "success": true, "user_id": "uuid", "message": "Account created..." }`,
+      },
+      {
+        method: "POST", path: "/auth/forgot-password", description: "Send password reset email",
+        auth: "none",
+        body: [{ name: "email", type: "string", required: true, description: "Account email address" }],
+        response: `{ "success": true, "message": "Password reset email sent" }`,
+      },
+      {
+        method: "POST", path: "/auth/change-password", description: "Change password for authenticated user",
+        auth: "credentials",
+        body: [
+          { name: "new_password", type: "string", required: true, description: "New password (min 6 chars)" },
+        ],
+        response: `{ "success": true, "message": "Password updated successfully" }`,
+      },
+    ],
+  },
+  {
+    title: "Health & Me",
     icon: Key,
     endpoints: [
-      { method: "GET", path: "/health", description: "Health check — verify API is running", auth: "both", response: `{ "status": "ok", "timestamp": "ISO8601", "version": "2.0.0" }` },
-      { method: "GET", path: "/me", description: "Get current user profile, roles, and email", auth: "jwt", response: `{ "user": { "id": "uuid", "email": "string" }, "profile": { ... }, "roles": ["alumni"] }` },
+      { method: "GET", path: "/health", description: "Health check — verify API is running", auth: "none", response: `{ "status": "ok", "timestamp": "ISO8601", "version": "3.0.0" }` },
+      { method: "GET", path: "/me", description: "Get current user profile, roles, and email", auth: "credentials", response: `{ "user": { "id": "uuid", "email": "string" }, "profile": { ... }, "roles": ["alumni"] }` },
     ],
   },
   {
@@ -52,8 +91,8 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
       },
       { method: "GET", path: "/profiles/:userId", description: "Get a single profile by user ID", auth: "both", response: `{ "user_id": "uuid", "full_name": "string", ... }` },
       {
-        method: "PUT", path: "/profiles/:userId", description: "Update own profile (JWT required)",
-        auth: "jwt",
+        method: "PUT", path: "/profiles/:userId", description: "Update own profile",
+        auth: "credentials",
         body: [
           { name: "full_name", type: "string", required: false, description: "Display name" },
           { name: "bio", type: "string", required: false, description: "Bio text" },
@@ -81,20 +120,20 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
       { method: "GET", path: "/posts/:id", description: "Get single post details", auth: "both", response: `{ "id": "uuid", "content": "string", ... }` },
       {
         method: "POST", path: "/posts", description: "Create a new post",
-        auth: "jwt",
+        auth: "credentials",
         body: [
           { name: "content", type: "string", required: true, description: "Post content text" },
           { name: "image_url", type: "string", required: false, description: "Optional image URL" },
         ],
         response: `{ "id": "uuid", "content": "string", "user_id": "uuid", ... }`,
       },
-      { method: "DELETE", path: "/posts/:id", description: "Delete own post", auth: "jwt", response: `{ "success": true }` },
-      { method: "POST", path: "/posts/:id/likes", description: "Like a post", auth: "jwt", response: `{ "id": "uuid", "post_id": "uuid", ... }` },
-      { method: "DELETE", path: "/posts/:id/likes", description: "Unlike a post", auth: "jwt", response: `{ "success": true }` },
+      { method: "DELETE", path: "/posts/:id", description: "Delete own post", auth: "credentials", response: `{ "success": true }` },
+      { method: "POST", path: "/posts/:id/likes", description: "Like a post", auth: "credentials", response: `{ "id": "uuid", "post_id": "uuid", ... }` },
+      { method: "DELETE", path: "/posts/:id/likes", description: "Unlike a post", auth: "credentials", response: `{ "success": true }` },
       { method: "GET", path: "/posts/:id/comments", description: "Get comments for a post", auth: "both", response: `[{ "id": "uuid", "content": "string", ... }]` },
       {
         method: "POST", path: "/posts/:id/comments", description: "Add a comment to a post",
-        auth: "jwt",
+        auth: "credentials",
         body: [{ name: "content", type: "string", required: true, description: "Comment text" }],
         response: `{ "id": "uuid", "content": "string", ... }`,
       },
@@ -116,7 +155,7 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
       { method: "GET", path: "/events/:id", description: "Get event details", auth: "both", response: `{ "id": "uuid", "title": "string", ... }` },
       {
         method: "POST", path: "/events", description: "Create an event",
-        auth: "jwt",
+        auth: "credentials",
         body: [
           { name: "title", type: "string", required: true, description: "Event title" },
           { name: "start_date", type: "ISO8601", required: true, description: "Start date/time" },
@@ -127,8 +166,8 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
         ],
         response: `{ "id": "uuid", "title": "string", ... }`,
       },
-      { method: "POST", path: "/events/:id/rsvp", description: "RSVP to an event", auth: "jwt", body: [{ name: "status", type: "string", required: false, description: "'going', 'maybe', 'not_going'" }], response: `{ "id": "uuid", "event_id": "uuid", ... }` },
-      { method: "DELETE", path: "/events/:id/rsvp", description: "Cancel RSVP", auth: "jwt", response: `{ "success": true }` },
+      { method: "POST", path: "/events/:id/rsvp", description: "RSVP to an event", auth: "credentials", body: [{ name: "status", type: "string", required: false, description: "'going', 'maybe', 'not_going'" }], response: `{ "id": "uuid", "event_id": "uuid", ... }` },
+      { method: "DELETE", path: "/events/:id/rsvp", description: "Cancel RSVP", auth: "credentials", response: `{ "success": true }` },
       { method: "GET", path: "/events/:id/attendees", description: "List event RSVPs/attendees", auth: "both", response: `[{ "id": "uuid", "user_id": "uuid", "status": "going", ... }]` },
     ],
   },
@@ -138,20 +177,20 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
     endpoints: [
       {
         method: "GET", path: "/messages", description: "Get messages (optionally filtered by partner)",
-        auth: "jwt",
+        auth: "credentials",
         params: [{ name: "partner_id", type: "uuid", required: false, description: "Filter conversation by partner user ID" }],
         response: `[{ "id": "uuid", "sender_id": "uuid", "receiver_id": "uuid", "content": "string", ... }]`,
       },
       {
         method: "POST", path: "/messages", description: "Send a message",
-        auth: "jwt",
+        auth: "credentials",
         body: [
           { name: "receiver_id", type: "uuid", required: true, description: "Recipient user ID" },
           { name: "content", type: "string", required: true, description: "Message text" },
         ],
         response: `{ "id": "uuid", "sender_id": "uuid", ... }`,
       },
-      { method: "PUT", path: "/messages/:id", description: "Mark message as read", auth: "jwt", response: `{ "id": "uuid", "is_read": true, ... }` },
+      { method: "PUT", path: "/messages/:id", description: "Mark message as read", auth: "credentials", response: `{ "id": "uuid", "is_read": true, ... }` },
     ],
   },
   {
@@ -160,14 +199,14 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
     endpoints: [
       {
         method: "GET", path: "/notifications", description: "Get user notifications",
-        auth: "jwt",
+        auth: "credentials",
         params: [
           { name: "limit", type: "number", required: false, description: "Max results (default: 20)" },
           { name: "unread", type: "boolean", required: false, description: "Filter unread only (true/false)" },
         ],
         response: `[{ "id": "uuid", "title": "string", "message": "string", "is_read": false, ... }]`,
       },
-      { method: "PUT", path: "/notifications/:id", description: "Mark notification as read", auth: "jwt", response: `{ "id": "uuid", "is_read": true, ... }` },
+      { method: "PUT", path: "/notifications/:id", description: "Mark notification as read", auth: "credentials", response: `{ "id": "uuid", "is_read": true, ... }` },
     ],
   },
   {
@@ -187,7 +226,7 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
       { method: "GET", path: "/opportunities/:id", description: "Get opportunity details", auth: "both", response: `{ "id": "uuid", "title": "string", ... }` },
       {
         method: "POST", path: "/opportunities", description: "Post a new opportunity",
-        auth: "jwt",
+        auth: "credentials",
         body: [
           { name: "title", type: "string", required: true, description: "Job title" },
           { name: "company", type: "string", required: true, description: "Company name" },
@@ -199,7 +238,7 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
         ],
         response: `{ "id": "uuid", "title": "string", ... }`,
       },
-      { method: "PUT", path: "/opportunities/:id", description: "Update an opportunity", auth: "jwt", body: [{ name: "title", type: "string", required: false, description: "Updated title" }], response: `{ "id": "uuid", ... }` },
+      { method: "PUT", path: "/opportunities/:id", description: "Update an opportunity", auth: "credentials", body: [{ name: "title", type: "string", required: false, description: "Updated title" }], response: `{ "id": "uuid", ... }` },
     ],
   },
   {
@@ -218,7 +257,7 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
       { method: "GET", path: "/campaigns/:id", description: "Get campaign details", auth: "both", response: `{ "id": "uuid", "title": "string", ... }` },
       {
         method: "POST", path: "/campaigns", description: "Create a fundraising campaign (admin)",
-        auth: "jwt",
+        auth: "credentials",
         body: [
           { name: "title", type: "string", required: true, description: "Campaign title" },
           { name: "goal_amount", type: "number", required: false, description: "Fundraising goal" },
@@ -226,11 +265,11 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
         ],
         response: `{ "id": "uuid", "title": "string", ... }`,
       },
-      { method: "PUT", path: "/campaigns/:id", description: "Update a campaign", auth: "jwt", response: `{ "id": "uuid", ... }` },
+      { method: "PUT", path: "/campaigns/:id", description: "Update a campaign", auth: "credentials", response: `{ "id": "uuid", ... }` },
       { method: "GET", path: "/campaigns/:id/donations", description: "List donations for a campaign", auth: "both", response: `[{ "id": "uuid", "amount": 100, ... }]` },
       {
         method: "POST", path: "/campaigns/:id/donations", description: "Make a donation to a campaign",
-        auth: "jwt",
+        auth: "credentials",
         body: [
           { name: "amount", type: "number", required: true, description: "Donation amount" },
           { name: "message", type: "string", required: false, description: "Donation message" },
@@ -238,7 +277,7 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
         ],
         response: `{ "id": "uuid", "amount": 100, ... }`,
       },
-      { method: "GET", path: "/donations", description: "Get own donation history", auth: "jwt", response: `[{ "id": "uuid", "amount": 100, "campaign_id": "uuid", ... }]` },
+      { method: "GET", path: "/donations", description: "Get own donation history", auth: "credentials", response: `[{ "id": "uuid", "amount": 100, "campaign_id": "uuid", ... }]` },
     ],
   },
   {
@@ -247,21 +286,21 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
     endpoints: [
       {
         method: "GET", path: "/connections", description: "List user's connections",
-        auth: "jwt",
+        auth: "credentials",
         params: [{ name: "status", type: "string", required: false, description: "Filter by status: 'pending', 'accepted', 'rejected'" }],
         response: `[{ "id": "uuid", "source_user_id": "uuid", "target_user_id": "uuid", "status": "accepted", ... }]`,
       },
       {
         method: "POST", path: "/connections", description: "Send a connection request",
-        auth: "jwt",
+        auth: "credentials",
         body: [
           { name: "target_user_id", type: "uuid", required: true, description: "User to connect with" },
           { name: "relation_type", type: "string", required: false, description: "'connection', 'mentor', 'referral'" },
         ],
         response: `{ "id": "uuid", "status": "pending", ... }`,
       },
-      { method: "PUT", path: "/connections/:id", description: "Accept/reject connection", auth: "jwt", body: [{ name: "status", type: "string", required: true, description: "'accepted' or 'rejected'" }], response: `{ "id": "uuid", "status": "accepted", ... }` },
-      { method: "DELETE", path: "/connections/:id", description: "Remove a connection", auth: "jwt", response: `{ "success": true }` },
+      { method: "PUT", path: "/connections/:id", description: "Accept/reject connection", auth: "credentials", body: [{ name: "status", type: "string", required: true, description: "'accepted' or 'rejected'" }], response: `{ "id": "uuid", "status": "accepted", ... }` },
+      { method: "DELETE", path: "/connections/:id", description: "Remove a connection", auth: "credentials", response: `{ "success": true }` },
     ],
   },
   {
@@ -281,7 +320,7 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
       { method: "GET", path: "/forum/:id", description: "Get forum post details", auth: "both", response: `{ "id": "uuid", "title": "string", ... }` },
       {
         method: "POST", path: "/forum", description: "Create a forum post",
-        auth: "jwt",
+        auth: "credentials",
         body: [
           { name: "title", type: "string", required: true, description: "Post title" },
           { name: "content", type: "string", required: true, description: "Post content" },
@@ -290,12 +329,12 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
         ],
         response: `{ "id": "uuid", "title": "string", ... }`,
       },
-      { method: "PUT", path: "/forum/:id", description: "Update own forum post", auth: "jwt", response: `{ "id": "uuid", ... }` },
-      { method: "DELETE", path: "/forum/:id", description: "Delete own forum post", auth: "jwt", response: `{ "success": true }` },
+      { method: "PUT", path: "/forum/:id", description: "Update own forum post", auth: "credentials", response: `{ "id": "uuid", ... }` },
+      { method: "DELETE", path: "/forum/:id", description: "Delete own forum post", auth: "credentials", response: `{ "success": true }` },
       { method: "GET", path: "/forum/:id/replies", description: "Get replies for a forum post", auth: "both", response: `[{ "id": "uuid", "content": "string", ... }]` },
       {
         method: "POST", path: "/forum/:id/replies", description: "Reply to a forum post",
-        auth: "jwt",
+        auth: "credentials",
         body: [{ name: "content", type: "string", required: true, description: "Reply content" }],
         response: `{ "id": "uuid", "content": "string", ... }`,
       },
@@ -317,7 +356,7 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
       { method: "GET", path: "/success-stories/:id", description: "Get story details", auth: "both", response: `{ "id": "uuid", "title": "string", ... }` },
       {
         method: "POST", path: "/success-stories", description: "Submit a success story",
-        auth: "jwt",
+        auth: "credentials",
         body: [
           { name: "title", type: "string", required: true, description: "Story title" },
           { name: "content", type: "string", required: true, description: "Story content" },
@@ -326,7 +365,7 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
         ],
         response: `{ "id": "uuid", "title": "string", ... }`,
       },
-      { method: "PUT", path: "/success-stories/:id", description: "Update a success story", auth: "jwt", response: `{ "id": "uuid", ... }` },
+      { method: "PUT", path: "/success-stories/:id", description: "Update a success story", auth: "credentials", response: `{ "id": "uuid", ... }` },
     ],
   },
   {
@@ -342,18 +381,18 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
     icon: Zap,
     endpoints: [
       { method: "GET", path: "/stories", description: "List active stories (not expired)", auth: "both", response: `[{ "id": "uuid", "content": "string", "expires_at": "ISO8601", ... }]` },
-      { method: "POST", path: "/stories", description: "Create a story (expires in 24h)", auth: "jwt", body: [{ name: "content", type: "string", required: false, description: "Story text" }, { name: "image_url", type: "string", required: false, description: "Image URL" }], response: `{ "id": "uuid", ... }` },
-      { method: "DELETE", path: "/stories/:id", description: "Delete own story", auth: "jwt", response: `{ "success": true }` },
+      { method: "POST", path: "/stories", description: "Create a story (expires in 24h)", auth: "credentials", body: [{ name: "content", type: "string", required: false, description: "Story text" }, { name: "image_url", type: "string", required: false, description: "Image URL" }], response: `{ "id": "uuid", ... }` },
+      { method: "DELETE", path: "/stories/:id", description: "Delete own story", auth: "credentials", response: `{ "success": true }` },
     ],
   },
   {
     title: "Referrals",
     icon: Shield,
     endpoints: [
-      { method: "GET", path: "/referrals", description: "List referral requests", auth: "jwt", response: `[{ "id": "uuid", "company": "string", "status": "pending", ... }]` },
+      { method: "GET", path: "/referrals", description: "List referral requests", auth: "credentials", response: `[{ "id": "uuid", "company": "string", "status": "pending", ... }]` },
       {
         method: "POST", path: "/referrals", description: "Create referral request",
-        auth: "jwt",
+        auth: "credentials",
         body: [
           { name: "alumni_id", type: "uuid", required: true, description: "Target alumni user ID" },
           { name: "company", type: "string", required: true, description: "Company name" },
@@ -362,17 +401,17 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
         ],
         response: `{ "id": "uuid", ... }`,
       },
-      { method: "PUT", path: "/referrals/:id", description: "Update referral status", auth: "jwt", body: [{ name: "status", type: "string", required: true, description: "'accepted', 'rejected', 'pending'" }], response: `{ "id": "uuid", ... }` },
+      { method: "PUT", path: "/referrals/:id", description: "Update referral status", auth: "credentials", body: [{ name: "status", type: "string", required: true, description: "'accepted', 'rejected', 'pending'" }], response: `{ "id": "uuid", ... }` },
     ],
   },
   {
     title: "Verification",
     icon: Shield,
     endpoints: [
-      { method: "GET", path: "/verification", description: "Get own verification requests", auth: "jwt", response: `[{ "id": "uuid", "status": "pending", "verification_type": "string", ... }]` },
+      { method: "GET", path: "/verification", description: "Get own verification requests", auth: "credentials", response: `[{ "id": "uuid", "status": "pending", "verification_type": "string", ... }]` },
       {
         method: "POST", path: "/verification", description: "Submit a verification request",
-        auth: "jwt",
+        auth: "credentials",
         body: [
           { name: "verification_type", type: "string", required: true, description: "Type: 'document', 'linkedin', 'email'" },
           { name: "verification_data", type: "object", required: false, description: "Verification metadata" },
@@ -397,10 +436,10 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
     title: "Mailing Campaigns (Admin)",
     icon: Mail,
     endpoints: [
-      { method: "GET", path: "/mailing-campaigns", description: "List mailing campaigns (admin only)", auth: "jwt", response: `[{ "id": "uuid", "title": "string", "status": "draft", ... }]` },
+      { method: "GET", path: "/mailing-campaigns", description: "List mailing campaigns (admin only)", auth: "credentials", response: `[{ "id": "uuid", "title": "string", "status": "draft", ... }]` },
       {
         method: "POST", path: "/mailing-campaigns", description: "Create a mailing campaign",
-        auth: "jwt",
+        auth: "credentials",
         body: [
           { name: "title", type: "string", required: true, description: "Campaign title" },
           { name: "message", type: "string", required: true, description: "Email message body" },
@@ -408,14 +447,14 @@ const sections: { title: string; icon: typeof Book; endpoints: Endpoint[] }[] = 
         ],
         response: `{ "id": "uuid", "title": "string", ... }`,
       },
-      { method: "PUT", path: "/mailing-campaigns/:id", description: "Update a mailing campaign", auth: "jwt", response: `{ "id": "uuid", ... }` },
+      { method: "PUT", path: "/mailing-campaigns/:id", description: "Update a mailing campaign", auth: "credentials", response: `{ "id": "uuid", ... }` },
     ],
   },
   {
     title: "Roles",
     icon: Shield,
     endpoints: [
-      { method: "GET", path: "/roles/:userId", description: "Get roles for a user (admin or self)", auth: "jwt", response: `[{ "id": "uuid", "user_id": "uuid", "role": "alumni" }]` },
+      { method: "GET", path: "/roles/:userId", description: "Get roles for a user (admin or self)", auth: "credentials", response: `[{ "id": "uuid", "user_id": "uuid", "role": "alumni" }]` },
     ],
   },
 ];
@@ -431,9 +470,15 @@ function CopyButton({ text }: { text: string }) {
 
 function EndpointCard({ ep }: { ep: Endpoint }) {
   const [open, setOpen] = useState(false);
-  const curlExample = ep.method === "GET"
-    ? `curl -H "x-api-key: YOUR_KEY" "${BASE_URL}${ep.path}"`
-    : `curl -X ${ep.method} -H "Authorization: Bearer JWT_TOKEN" -H "Content-Type: application/json" ${ep.body ? `-d '${JSON.stringify(Object.fromEntries((ep.body || []).filter(b => b.required).map(b => [b.name, `<${b.type}>`])))}' ` : ""}"${BASE_URL}${ep.path}"`;
+  const authLabel = ep.auth === "credentials" ? "Email/Pass" : ep.auth === "api-key" ? "API Key" : ep.auth === "none" ? "Public" : "Email/Pass / API Key";
+
+  const curlExample = ep.auth === "none"
+    ? ep.body
+      ? `curl -X ${ep.method} -H "Content-Type: application/json" -d '${JSON.stringify(Object.fromEntries((ep.body || []).filter(b => b.required).map(b => [b.name, `<${b.type}>`])))}' "${BASE_URL}${ep.path}"`
+      : `curl "${BASE_URL}${ep.path}"`
+    : ep.method === "GET"
+      ? `curl -H "x-email: you@example.com" -H "x-password: yourpass" "${BASE_URL}${ep.path}"`
+      : `curl -X ${ep.method} -H "x-email: you@example.com" -H "x-password: yourpass" -H "Content-Type: application/json" ${ep.body ? `-d '${JSON.stringify(Object.fromEntries((ep.body || []).filter(b => b.required).map(b => [b.name, `<${b.type}>`])))}' ` : ""}"${BASE_URL}${ep.path}"`;
 
   return (
     <div className="border border-border rounded-lg overflow-hidden bg-card">
@@ -443,7 +488,7 @@ function EndpointCard({ ep }: { ep: Endpoint }) {
         </Badge>
         <code className="text-sm font-mono text-card-foreground flex-1">{ep.path}</code>
         <span className="text-xs text-muted-foreground hidden sm:block max-w-[200px] truncate">{ep.description}</span>
-        <Badge variant="outline" className="text-[10px]">{ep.auth === "jwt" ? "JWT" : ep.auth === "api-key" ? "API Key" : "JWT / API Key"}</Badge>
+        <Badge variant="outline" className="text-[10px]">{authLabel}</Badge>
         {open ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
       </button>
 
@@ -525,35 +570,39 @@ export default function ApiDocsPage() {
               <Book className="h-5 w-5 text-accent" />
             </div>
             <h1 className="text-3xl font-heading font-bold text-foreground">API Documentation</h1>
-            <Badge variant="outline" className="ml-2">{totalEndpoints} endpoints</Badge>
+            <Badge variant="outline" className="ml-2">v3.0</Badge>
+            <Badge variant="outline" className="ml-1">{totalEndpoints} endpoints</Badge>
           </div>
-          <p className="text-muted-foreground text-sm mt-1">Complete REST API reference for mobile apps and third-party integrations</p>
+          <p className="text-muted-foreground text-sm mt-1">Complete REST API reference for mobile apps and third-party integrations — <strong>no JWT required</strong></p>
         </motion.div>
 
         {/* Auth section */}
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-card border border-border rounded-xl p-6 mb-8 shadow-card">
           <h2 className="font-heading font-semibold text-card-foreground text-lg mb-4 flex items-center gap-2">
-            <Key className="h-5 w-5 text-accent" /> Authentication
+            <Key className="h-5 w-5 text-accent" /> Authentication (v3.0)
           </h2>
           <div className="space-y-4 text-sm text-muted-foreground">
             <div>
-              <h3 className="font-semibold text-foreground text-sm mb-1">Option 1: Bearer JWT (User Authentication)</h3>
-              <p>For user-specific operations. Get a JWT by signing in via the auth endpoint.</p>
+              <h3 className="font-semibold text-foreground text-sm mb-1">Option 1: Email + Password Headers (Recommended for Mobile)</h3>
+              <p>Send your credentials with every request via <code className="text-accent">x-email</code> and <code className="text-accent">x-password</code> headers. No tokens to manage or refresh.</p>
               <div className="flex items-center gap-2 mt-2">
-                <pre className="bg-background rounded-lg px-3 py-2 text-xs font-mono flex-1">Authorization: Bearer eyJhbGciOi...</pre>
-                <CopyButton text='Authorization: Bearer YOUR_JWT_TOKEN' />
+                <pre className="bg-background rounded-lg px-3 py-2 text-xs font-mono flex-1">x-email: you@example.com{"\n"}x-password: yourpassword</pre>
+                <CopyButton text={'x-email: you@example.com\nx-password: yourpassword'} />
               </div>
             </div>
             <div>
-              <h3 className="font-semibold text-foreground text-sm mb-1">Option 2: API Key (Server/Mobile)</h3>
+              <h3 className="font-semibold text-foreground text-sm mb-1">Option 2: API Key (Read-Only)</h3>
               <p>For read-only operations or server-to-server calls. Pass via <code className="text-accent">x-api-key</code> header.</p>
               <div className="flex items-center gap-2 mt-2">
                 <pre className="bg-background rounded-lg px-3 py-2 text-xs font-mono flex-1">x-api-key: your-api-key-here</pre>
                 <CopyButton text='x-api-key: YOUR_API_KEY' />
               </div>
             </div>
+            <div className="bg-info/5 border border-info/20 rounded-lg p-3">
+              <p className="text-xs text-info"><strong>Login first:</strong> Use <code>POST /auth/login</code> with JSON body to verify credentials and get user info. Then use <code>x-email</code> / <code>x-password</code> headers for all subsequent requests.</p>
+            </div>
             <div className="bg-warning/5 border border-warning/20 rounded-lg p-3">
-              <p className="text-xs text-warning"><strong>Note:</strong> Write operations (POST, PUT, DELETE) always require a Bearer JWT. API keys only grant read access. Rate limit: 60 requests/minute per key.</p>
+              <p className="text-xs text-warning"><strong>Note:</strong> Write operations (POST, PUT, DELETE) require email+password auth. API keys only grant read access. Rate limit: 60 requests/minute per user.</p>
             </div>
           </div>
         </motion.div>
@@ -602,8 +651,8 @@ export default function ApiDocsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
               { code: 400, desc: "Bad Request — invalid parameters or body" },
-              { code: 401, desc: "Unauthorized — missing or invalid auth" },
-              { code: 403, desc: "Forbidden — write operation without JWT" },
+              { code: 401, desc: "Unauthorized — missing or invalid credentials" },
+              { code: 403, desc: "Forbidden — write operation without email/password" },
               { code: 404, desc: "Not Found — resource or endpoint not found" },
               { code: 429, desc: "Rate Limit — exceeded 60 req/min, check Retry-After header" },
               { code: 500, desc: "Internal Server Error — unexpected failure" },
