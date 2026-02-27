@@ -7,6 +7,7 @@ import {
   AlertTriangle, Key, Send
 } from "lucide-react";
 import OutboundScheduler from "@/components/telecalling/OutboundScheduler";
+import CallAnalyticsCharts from "@/components/telecalling/CallAnalyticsCharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -299,6 +300,7 @@ export default function TelecallingDashboard() {
         <TabsList>
           <TabsTrigger value="sessions">Call Sessions</TabsTrigger>
           <TabsTrigger value="outbound">Outbound Calls</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="intents">Intent Analytics</TabsTrigger>
         </TabsList>
 
@@ -403,6 +405,11 @@ export default function TelecallingDashboard() {
         {/* Outbound Scheduling */}
         <TabsContent value="outbound">
           <OutboundScheduler />
+        </TabsContent>
+
+        {/* Analytics Charts */}
+        <TabsContent value="analytics">
+          <CallAnalyticsCharts sessions={sessions} />
         </TabsContent>
 
         {/* Intent Analytics */}
