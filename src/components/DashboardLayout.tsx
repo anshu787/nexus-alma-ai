@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, MessageSquare, Calendar, Briefcase, Brain,
   BarChart3, Settings, Sparkles, ChevronLeft, Bell, Search, LogOut,
   Target, Trophy, Share2, User, Send, Palette, Shield, Check, X, BellRing,
-  ShieldCheck, Award, Heart, TrendingUp, Globe, MessageCircle, DollarSign, Mail
+  ShieldCheck, Award, Heart, TrendingUp, Globe, MessageCircle, DollarSign, Mail, Phone
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -49,6 +49,7 @@ const navItems: NavItem[] = [
   { icon: ShieldCheck, label: "Verification", path: "/dashboard/verification", roles: ["moderator", "institution_admin"] },
   { icon: Palette, label: "Branding", path: "/dashboard/branding", roles: ["institution_admin"] },
   { icon: Shield, label: "Super Admin", path: "/dashboard/admin", roles: ["super_admin"] },
+  { icon: Phone, label: "Telecalling", path: "/dashboard/telecalling", roles: ["super_admin", "institution_admin"] },
   { icon: Settings, label: "Settings", path: "/dashboard/settings" },
 ];
 

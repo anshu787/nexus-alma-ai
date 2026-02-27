@@ -36,6 +36,7 @@ import GlobalAlumniMap from "./pages/GlobalAlumniMap";
 import AdminAnalyticsPage from "./pages/AdminAnalyticsPage";
 import MailingCampaignsPage from "./pages/MailingCampaignsPage";
 import SettingsPage from "./pages/SettingsPage";
+import TelecallingDashboard from "./pages/TelecallingDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -95,6 +96,7 @@ const AppRoutes = () => (
     <Route path="/dashboard/verification" element={<GuardedDashPage roles={["moderator", "institution_admin"]}><VerificationPage /></GuardedDashPage>} />
     <Route path="/dashboard/branding" element={<GuardedDashPage roles={["institution_admin"]}><InstitutionBranding /></GuardedDashPage>} />
     <Route path="/dashboard/admin" element={<GuardedDashPage roles={["super_admin"]}><SuperAdminDashboard /></GuardedDashPage>} />
+    <Route path="/dashboard/telecalling" element={<GuardedDashPage roles={["super_admin", "institution_admin"]}><TelecallingDashboard /></GuardedDashPage>} />
 
     <Route path="*" element={<NotFound />} />
   </Routes>
