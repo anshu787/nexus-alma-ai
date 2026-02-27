@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import RoleGuard from "@/components/RoleGuard";
 import LandingPage from "./pages/LandingPage";
 import AuthPage from "./pages/AuthPage";
 import DashboardLayout from "./components/DashboardLayout";
@@ -50,11 +51,21 @@ function DashPage({ children }: { children: React.ReactNode }) {
   return <ProtectedRoute><DashboardLayout>{children}</DashboardLayout></ProtectedRoute>;
 }
 
+function GuardedDashPage({ children, roles }: { children: React.ReactNode; roles: string[] }) {
+  return (
+    <DashPage>
+      <RoleGuard allowedRoles={roles}>{children}</RoleGuard>
+    </DashPage>
+  );
+}
+
 const AppRoutes = () => (
   <Routes>
     <Route path="/" element={<LandingPage />} />
     <Route path="/api-docs" element={<ApiDocsPage />} />
     <Route path="/auth" element={<AuthPage />} />
+
+    {/* Open to all authenticated users */}
     <Route path="/dashboard" element={<DashPage><DashboardOverview /></DashPage>} />
     <Route path="/dashboard/directory" element={<DashPage><AlumniDirectory /></DashPage>} />
     <Route path="/dashboard/feed" element={<DashPage><SocialFeedV2 /></DashPage>} />
@@ -62,26 +73,29 @@ const AppRoutes = () => (
     <Route path="/dashboard/events" element={<DashPage><EventsPage /></DashPage>} />
     <Route path="/dashboard/opportunities" element={<DashPage><OpportunitiesPage /></DashPage>} />
     <Route path="/dashboard/ai" element={<DashPage><AIAssistant /></DashPage>} />
-    <Route path="/dashboard/skill-gap" element={<DashPage><SkillGapAnalyzer /></DashPage>} />
     <Route path="/dashboard/profile" element={<DashPage><ProfilePage /></DashPage>} />
     <Route path="/dashboard/leaderboard" element={<DashPage><LeaderboardPage /></DashPage>} />
     <Route path="/dashboard/network" element={<DashPage><NetworkGraph /></DashPage>} />
     <Route path="/dashboard/notifications" element={<DashPage><NotificationsPage /></DashPage>} />
-    <Route path="/dashboard/analytics" element={<DashPage><AnalyticsPage /></DashPage>} />
-    <Route path="/dashboard/branding" element={<DashPage><InstitutionBranding /></DashPage>} />
-    <Route path="/dashboard/admin" element={<DashPage><SuperAdminDashboard /></DashPage>} />
-    <Route path="/dashboard/verification" element={<DashPage><VerificationPage /></DashPage>} />
-    <Route path="/dashboard/impact" element={<DashPage><ImpactDashboard /></DashPage>} />
     <Route path="/dashboard/mentorship" element={<DashPage><MentorshipPage /></DashPage>} />
-    <Route path="/dashboard/mentor-dashboard" element={<DashPage><MentorDashboard /></DashPage>} />
-    <Route path="/dashboard/career-path" element={<DashPage><CareerPathPage /></DashPage>} />
     <Route path="/dashboard/stories" element={<DashPage><SuccessStoriesPage /></DashPage>} />
-    <Route path="/dashboard/fundraising" element={<DashPage><FundraisingPage /></DashPage>} />
     <Route path="/dashboard/forum" element={<DashPage><CareerForumPage /></DashPage>} />
     <Route path="/dashboard/global-map" element={<DashPage><GlobalAlumniMap /></DashPage>} />
-    <Route path="/dashboard/admin-analytics" element={<DashPage><AdminAnalyticsPage /></DashPage>} />
-    <Route path="/dashboard/campaigns" element={<DashPage><MailingCampaignsPage /></DashPage>} />
+    <Route path="/dashboard/analytics" element={<DashPage><AnalyticsPage /></DashPage>} />
     <Route path="/dashboard/settings" element={<DashPage><SettingsPage /></DashPage>} />
+
+    {/* Role-restricted routes */}
+    <Route path="/dashboard/skill-gap" element={<GuardedDashPage roles={["alumni", "student"]}><SkillGapAnalyzer /></GuardedDashPage>} />
+    <Route path="/dashboard/career-path" element={<GuardedDashPage roles={["alumni", "student"]}><CareerPathPage /></GuardedDashPage>} />
+    <Route path="/dashboard/mentor-dashboard" element={<GuardedDashPage roles={["alumni", "moderator", "institution_admin"]}><MentorDashboard /></GuardedDashPage>} />
+    <Route path="/dashboard/fundraising" element={<GuardedDashPage roles={["alumni", "institution_admin"]}><FundraisingPage /></GuardedDashPage>} />
+    <Route path="/dashboard/admin-analytics" element={<GuardedDashPage roles={["institution_admin"]}><AdminAnalyticsPage /></GuardedDashPage>} />
+    <Route path="/dashboard/campaigns" element={<GuardedDashPage roles={["institution_admin"]}><MailingCampaignsPage /></GuardedDashPage>} />
+    <Route path="/dashboard/impact" element={<GuardedDashPage roles={["moderator", "institution_admin"]}><ImpactDashboard /></GuardedDashPage>} />
+    <Route path="/dashboard/verification" element={<GuardedDashPage roles={["moderator", "institution_admin"]}><VerificationPage /></GuardedDashPage>} />
+    <Route path="/dashboard/branding" element={<GuardedDashPage roles={["institution_admin"]}><InstitutionBranding /></GuardedDashPage>} />
+    <Route path="/dashboard/admin" element={<GuardedDashPage roles={["super_admin"]}><SuperAdminDashboard /></GuardedDashPage>} />
+
     <Route path="*" element={<NotFound />} />
   </Routes>
 );
