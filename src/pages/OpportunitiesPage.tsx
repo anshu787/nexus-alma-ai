@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Briefcase, MapPin, Clock, DollarSign, Plus, Send, Building2, Loader2, Search, User, ExternalLink } from "lucide-react";
+import { Briefcase, MapPin, Clock, DollarSign, Plus, Send, Building2, Loader2, Search, User, ExternalLink, CheckCircle2, XCircle, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -34,6 +34,17 @@ interface Referral {
   created_at: string;
 }
 
+interface IncomingReferral {
+  id: string;
+  company: string;
+  position: string | null;
+  message: string | null;
+  status: string;
+  created_at: string;
+  requester_id: string;
+  requester_name?: string;
+}
+
 interface AlumniOption {
   user_id: string;
   full_name: string;
@@ -52,12 +63,15 @@ export default function OpportunitiesPage() {
   const { user } = useAuth();
   const [jobs, setJobs] = useState<Opportunity[]>([]);
   const [referrals, setReferrals] = useState<Referral[]>([]);
+  const [incomingReferrals, setIncomingReferrals] = useState<IncomingReferral[]>([]);
   const [loading, setLoading] = useState(true);
   const [postOpen, setPostOpen] = useState(false);
   const [referralOpen, setReferralOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Opportunity | null>(null);
   const [newJob, setNewJob] = useState({ title: "", company: "", location: "", type: "job", employment_type: "full-time", salary_range: "", description: "", apply_url: "" });
   const [newReferral, setNewReferral] = useState({ company: "", position: "", alumni_id: "" });
+  const [respondingTo, setRespondingTo] = useState<string | null>(null);
+  const [responseComment, setResponseComment] = useState("");
 
   // Alumni search state
   const [alumniSearch, setAlumniSearch] = useState("");
@@ -73,8 +87,18 @@ export default function OpportunitiesPage() {
       setJobs((opps || []).map(o => ({ ...o, skills_required: o.skills_required || [] })));
 
       if (user) {
-        const { data: refs } = await supabase.from("referral_requests").select("*").or(`requester_id.eq.${user.id},alumni_id.eq.${user.id}`).order("created_at", { ascending: false });
+        // Sent referrals (by this user)
+        const { data: refs } = await supabase.from("referral_requests").select("*").eq("requester_id", user.id).order("created_at", { ascending: false });
         setReferrals(refs || []);
+
+        // Incoming referrals (where this user is the alumni)
+        const { data: incoming } = await supabase.from("referral_requests").select("*").eq("alumni_id", user.id).order("created_at", { ascending: false });
+        if (incoming && incoming.length > 0) {
+          const requesterIds = [...new Set(incoming.map(r => r.requester_id))];
+          const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", requesterIds);
+          const nameMap = new Map((profiles || []).map(p => [p.user_id, p.full_name]));
+          setIncomingReferrals(incoming.map(r => ({ ...r, requester_name: nameMap.get(r.requester_id) || "Unknown" })));
+        }
       }
       setLoading(false);
     };
@@ -128,6 +152,17 @@ export default function OpportunitiesPage() {
     setReferralOpen(false);
     setSelectedAlumni(null);
     setAlumniSearch("");
+  };
+
+  const handleReferralResponse = async (referralId: string, newStatus: "approved" | "rejected") => {
+    const updateData: any = { status: newStatus };
+    if (responseComment.trim()) updateData.message = responseComment.trim();
+    const { error } = await supabase.from("referral_requests").update(updateData).eq("id", referralId);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Referral ${newStatus}!`);
+    setRespondingTo(null);
+    setResponseComment("");
+    setIncomingReferrals(prev => prev.map(r => r.id === referralId ? { ...r, status: newStatus, message: responseComment.trim() || r.message } : r));
   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-accent" /></div>;
@@ -235,7 +270,20 @@ export default function OpportunitiesPage() {
       </div>
 
       <Tabs defaultValue="jobs">
-        <TabsList><TabsTrigger value="jobs">Jobs & Internships</TabsTrigger><TabsTrigger value="referrals">My Referrals</TabsTrigger></TabsList>
+        <TabsList>
+          <TabsTrigger value="jobs">Jobs & Internships</TabsTrigger>
+          <TabsTrigger value="referrals">My Referrals</TabsTrigger>
+          {incomingReferrals.length > 0 && (
+            <TabsTrigger value="incoming" className="relative">
+              Incoming Requests
+              {incomingReferrals.filter(r => r.status === "pending").length > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center h-5 w-5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold">
+                  {incomingReferrals.filter(r => r.status === "pending").length}
+                </span>
+              )}
+            </TabsTrigger>
+          )}
+        </TabsList>
 
         <TabsContent value="jobs" className="mt-4 space-y-3">
           {jobs.map((j, i) => (
@@ -276,6 +324,68 @@ export default function OpportunitiesPage() {
             </div>
           ))}
           {referrals.length === 0 && <div className="text-center py-12 text-muted-foreground text-sm">No referral requests yet.</div>}
+        </TabsContent>
+
+        <TabsContent value="incoming" className="mt-4 space-y-3">
+          {incomingReferrals.map((r) => (
+            <motion.div key={r.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              className="bg-card border border-border rounded-xl p-5 shadow-card">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-heading font-semibold text-card-foreground">{r.company}</p>
+                  <p className="text-sm text-muted-foreground">{r.position || "General Referral"}</p>
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                    <User className="h-3 w-3" /> Requested by <span className="font-medium text-foreground">{r.requester_name}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">{timeAgo(r.created_at)}</p>
+                </div>
+                <Badge variant="outline" className={r.status === "approved" ? "text-success border-success/20" : r.status === "rejected" ? "text-destructive border-destructive/20" : "text-warning border-warning/20"}>
+                  {r.status}
+                </Badge>
+              </div>
+
+              {r.message && r.status !== "pending" && (
+                <div className="mt-3 bg-muted rounded-lg p-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Your Response</p>
+                  <p className="text-sm text-foreground">{r.message}</p>
+                </div>
+              )}
+
+              {r.status === "pending" && (
+                <div className="mt-4 space-y-3">
+                  {respondingTo === r.id ? (
+                    <>
+                      <div>
+                        <Label className="text-xs">Add a comment (optional)</Label>
+                        <Textarea
+                          value={responseComment}
+                          onChange={(e) => setResponseComment(e.target.value)}
+                          placeholder="e.g. I've forwarded your resume to HR..."
+                          className="mt-1 min-h-[60px]"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="default" className="flex-1" onClick={() => handleReferralResponse(r.id, "approved")}>
+                          <CheckCircle2 className="h-4 w-4" /> Accept
+                        </Button>
+                        <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleReferralResponse(r.id, "rejected")}>
+                          <XCircle className="h-4 w-4" /> Decline
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => { setRespondingTo(null); setResponseComment(""); }}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => setRespondingTo(r.id)}>
+                      <MessageSquare className="h-4 w-4" /> Respond
+                    </Button>
+                  )}
+                </div>
+              )}
+            </motion.div>
+          ))}
+          {incomingReferrals.length === 0 && <div className="text-center py-12 text-muted-foreground text-sm">No incoming referral requests.</div>}
         </TabsContent>
       </Tabs>
 
