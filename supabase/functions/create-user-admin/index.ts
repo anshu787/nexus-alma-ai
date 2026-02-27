@@ -60,13 +60,21 @@ Deno.serve(async (req) => {
 
     const userId = newUser.user.id;
 
-    // Update profile
-    await adminClient.from("profiles").update({
+    // Upsert profile (trigger may not fire for admin-created users)
+    const { error: profileError } = await adminClient.from("profiles").upsert({
+      user_id: userId,
       full_name,
-    }).eq("user_id", userId);
+    }, { onConflict: "user_id" });
+    if (profileError) console.error("Profile upsert error:", profileError.message);
 
-    // Set role (the trigger creates a default "alumni" role, so update it)
-    if (role !== "alumni") {
+    // Upsert role
+    const { error: roleError } = await adminClient.from("user_roles").upsert({
+      user_id: userId,
+      role,
+    }, { onConflict: "user_id,role" });
+
+    // If role is different from default, also try updating existing row
+    if (roleError) {
       await adminClient.from("user_roles").update({ role }).eq("user_id", userId);
     }
 
