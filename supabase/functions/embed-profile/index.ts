@@ -183,15 +183,20 @@ Deno.serve(async (req) => {
       const uid = user_id;
       if (!uid) return json({ error: "user_id required" }, 400);
 
+      // Get user's profile for fallback matching
+      const { data: userProfile } = await adminClient
+        .from("profiles")
+        .select("*")
+        .eq("user_id", uid)
+        .single();
+
+      if (!userProfile) return json({ error: "Profile not found" }, 404);
+
       const { data: userEmb } = await adminClient
         .from("user_embeddings")
         .select("embedding")
         .eq("user_id", uid)
         .single();
-
-      if (!userEmb) return json({ error: "No embedding found. Generate one first." }, 404);
-
-      const userVector = userEmb.embedding as number[];
 
       // Get all other embeddings
       const { data: allEmbs } = await adminClient
@@ -199,37 +204,73 @@ Deno.serve(async (req) => {
         .select("user_id, embedding")
         .neq("user_id", uid);
 
-      if (!allEmbs || allEmbs.length === 0) return json({ matches: [] });
+      const hasEmbeddingMatches = userEmb && allEmbs && allEmbs.length > 0;
 
-      // Calculate similarities
-      const similarities = allEmbs.map((e) => ({
-        user_id: e.user_id,
-        similarity: cosineSimilarity(userVector, e.embedding as number[]),
-      }));
+      if (hasEmbeddingMatches) {
+        // Vector-based matching
+        const userVector = userEmb.embedding as number[];
+        const similarities = allEmbs.map((e) => ({
+          user_id: e.user_id,
+          similarity: cosineSimilarity(userVector, e.embedding as number[]),
+        }));
+        similarities.sort((a, b) => b.similarity - a.similarity);
+        const topMatches = similarities.slice(0, 10);
+        const matchIds = topMatches.map((m) => m.user_id);
+        const { data: profiles } = await adminClient
+          .from("profiles")
+          .select("user_id, full_name, company, designation, industry, skills, location, is_mentor, is_hiring, avatar_url")
+          .in("user_id", matchIds);
 
-      // Sort and get top matches
-      similarities.sort((a, b) => b.similarity - a.similarity);
-      const topMatches = similarities.slice(0, 10);
+        const results = topMatches.map((m) => {
+          const profile = profiles?.find((p) => p.user_id === m.user_id);
+          return { ...m, profile };
+        }).filter((m) => m.profile);
 
-      // Get profiles for matches
-      const matchIds = topMatches.map((m) => m.user_id);
-      const { data: profiles } = await adminClient
-        .from("profiles")
-        .select("user_id, full_name, company, designation, industry, skills, location, is_mentor, is_hiring, avatar_url")
-        .in("user_id", matchIds);
+        let filtered = results;
+        if (target_role === "mentor") {
+          filtered = results.filter((m) => m.profile?.is_mentor);
+        }
 
-      const results = topMatches.map((m) => {
-        const profile = profiles?.find((p) => p.user_id === m.user_id);
-        return { ...m, profile };
-      }).filter((m) => m.profile);
-
-      // Filter by target_role if provided (mentor matching)
-      let filtered = results;
-      if (target_role === "mentor") {
-        filtered = results.filter((m) => m.profile?.is_mentor);
+        if (filtered.length > 0) return json({ matches: filtered });
       }
 
-      return json({ matches: filtered });
+      // Fallback: profile-based matching (skills/industry overlap)
+      console.log("Using profile-based fallback matching");
+      let query = adminClient
+        .from("profiles")
+        .select("user_id, full_name, company, designation, industry, skills, location, is_mentor, is_hiring, avatar_url")
+        .neq("user_id", uid)
+        .limit(50);
+
+      if (target_role === "mentor") {
+        query = query.eq("is_mentor", true);
+      }
+
+      const { data: candidates } = await query;
+      if (!candidates || candidates.length === 0) return json({ matches: [] });
+
+      const userSkills = new Set((userProfile.skills || []).map((s: string) => s.toLowerCase()));
+      const userIndustry = (userProfile.industry || "").toLowerCase();
+      const userInterests = new Set((userProfile.interests || []).map((s: string) => s.toLowerCase()));
+
+      const scored = candidates.map((c) => {
+        const cSkills = (c.skills || []).map((s: string) => s.toLowerCase());
+        const skillOverlap = cSkills.filter((s: string) => userSkills.has(s)).length;
+        const maxSkills = Math.max(userSkills.size, cSkills.length, 1);
+        const skillScore = skillOverlap / maxSkills;
+
+        const industryScore = c.industry && c.industry.toLowerCase() === userIndustry ? 0.3 : 0;
+        const similarity = Math.min(skillScore * 0.7 + industryScore + 0.05, 1);
+
+        return {
+          user_id: c.user_id,
+          similarity: parseFloat(similarity.toFixed(3)),
+          profile: c,
+        };
+      });
+
+      scored.sort((a, b) => b.similarity - a.similarity);
+      return json({ matches: scored.slice(0, 10) });
     }
 
     // ACTION: career_path — predict career progression
