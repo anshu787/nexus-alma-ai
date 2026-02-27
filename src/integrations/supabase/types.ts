@@ -41,6 +41,98 @@ export type Database = {
         }
         Relationships: []
       }
+      call_action_logs: {
+        Row: {
+          action: string
+          call_session_id: string | null
+          created_at: string
+          endpoint: string | null
+          id: string
+          request_body: Json | null
+          response_status: number | null
+          response_summary: string | null
+        }
+        Insert: {
+          action: string
+          call_session_id?: string | null
+          created_at?: string
+          endpoint?: string | null
+          id?: string
+          request_body?: Json | null
+          response_status?: number | null
+          response_summary?: string | null
+        }
+        Update: {
+          action?: string
+          call_session_id?: string | null
+          created_at?: string
+          endpoint?: string | null
+          id?: string
+          request_body?: Json | null
+          response_status?: number | null
+          response_summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_action_logs_call_session_id_fkey"
+            columns: ["call_session_id"]
+            isOneToOne: false
+            referencedRelation: "call_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      call_sessions: {
+        Row: {
+          call_type: string
+          created_at: string
+          duration_seconds: number | null
+          ended_at: string | null
+          id: string
+          intent: string | null
+          metadata: Json | null
+          recording_url: string | null
+          started_at: string
+          status: string
+          summary: string | null
+          transcript: string | null
+          twilio_call_sid: string | null
+          user_id: string | null
+        }
+        Insert: {
+          call_type?: string
+          created_at?: string
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          intent?: string | null
+          metadata?: Json | null
+          recording_url?: string | null
+          started_at?: string
+          status?: string
+          summary?: string | null
+          transcript?: string | null
+          twilio_call_sid?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          call_type?: string
+          created_at?: string
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          intent?: string | null
+          metadata?: Json | null
+          recording_url?: string | null
+          started_at?: string
+          status?: string
+          summary?: string | null
+          transcript?: string | null
+          twilio_call_sid?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       campaigns: {
         Row: {
           created_at: string
@@ -885,6 +977,47 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_calls: {
+        Row: {
+          call_type: string
+          created_at: string
+          event_id: string | null
+          id: string
+          scheduled_at: string
+          status: string
+          twilio_call_sid: string | null
+          user_id: string
+        }
+        Insert: {
+          call_type?: string
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          scheduled_at: string
+          status?: string
+          twilio_call_sid?: string | null
+          user_id: string
+        }
+        Update: {
+          call_type?: string
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          scheduled_at?: string
+          status?: string
+          twilio_call_sid?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_calls_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stories: {
         Row: {
           content: string | null
@@ -1055,6 +1188,33 @@ export type Database = {
           user_id?: string
           verification_data?: Json | null
           verification_type?: string
+        }
+        Relationships: []
+      }
+      voice_access_codes: {
+        Row: {
+          access_code: string
+          created_at: string
+          expires_at: string
+          id: string
+          is_active: boolean
+          user_id: string
+        }
+        Insert: {
+          access_code: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          is_active?: boolean
+          user_id: string
+        }
+        Update: {
+          access_code?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          is_active?: boolean
+          user_id?: string
         }
         Relationships: []
       }
