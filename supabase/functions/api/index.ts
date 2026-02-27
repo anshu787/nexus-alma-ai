@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-api-key, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-api-key, x-email, x-password, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 function json(data: unknown, status = 200) {
@@ -45,21 +45,28 @@ function validateApiKey(apiKey: string): boolean {
   return validKeys.includes(apiKey);
 }
 
-function getSupabase(authHeader: string | null) {
+function getAdminClient() {
   const url = Deno.env.get("SUPABASE_URL")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const userClient = createClient(url, anonKey, {
-    global: { headers: { Authorization: authHeader || "" } },
-  });
-  const adminClient = createClient(url, serviceKey);
-  return { userClient, adminClient };
+  return createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
-async function getUser(userClient: ReturnType<typeof createClient>) {
-  const { data: { user }, error } = await userClient.auth.getUser();
-  if (error || !user) return null;
-  return user;
+/**
+ * Authenticate via email+password headers. Signs in with Supabase Auth,
+ * returns the authenticated user and a client scoped to that user.
+ */
+async function authWithEmailPassword(email: string, password: string) {
+  const url = Deno.env.get("SUPABASE_URL")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const tempClient = createClient(url, anonKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  const { data, error } = await tempClient.auth.signInWithPassword({ email, password });
+  if (error || !data.session) return { user: null, userClient: null, session: null, error: error?.message || "Invalid credentials" };
+  // Build a user-scoped client with the session token
+  const userClient = createClient(url, anonKey, {
+    global: { headers: { Authorization: `Bearer ${data.session.access_token}` } },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  return { user: data.user, userClient, session: data.session, error: null };
 }
 
 Deno.serve(async (req) => {
@@ -67,21 +74,105 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const authHeader = req.headers.get("Authorization");
-  const apiKey = req.headers.get("x-api-key");
-  const hasJwt = authHeader?.startsWith("Bearer ");
-  const hasApiKey = apiKey && validateApiKey(apiKey);
+  const url = new URL(req.url);
+  const pathParts = url.pathname.replace(/^\/api\/?/, "").split("/").filter(Boolean);
+  const resource = pathParts[0] || "";
+  const resourceId = pathParts[1] || "";
+  const subResource = pathParts[2] || "";
+  const method = req.method;
 
-  if (!hasJwt && !hasApiKey) {
-    return json({ error: "Unauthorized", message: "Provide a Bearer token or x-api-key header" }, 401);
+  // ── Auth endpoints (no auth required) ──
+  if (resource === "auth") {
+    if (method === "POST" && resourceId === "login") {
+      try {
+        const body = await req.json();
+        const { email, password } = body;
+        if (!email || !password) return json({ error: "Email and password are required" }, 400);
+        const { user, session, error } = await authWithEmailPassword(email, password);
+        if (error || !user || !session) return json({ error: error || "Invalid credentials" }, 401);
+        const adminClient = getAdminClient();
+        const { data: profile } = await adminClient.from("profiles").select("*").eq("user_id", user.id).single();
+        const { data: roles } = await adminClient.from("user_roles").select("role").eq("user_id", user.id);
+        return json({
+          user: { id: user.id, email: user.email },
+          profile,
+          roles: (roles || []).map((r: any) => r.role),
+          message: "Login successful. Use x-email and x-password headers for subsequent requests, or use this session info.",
+        });
+      } catch (e) {
+        return json({ error: e.message }, 400);
+      }
+    }
+
+    if (method === "POST" && resourceId === "signup") {
+      try {
+        const body = await req.json();
+        const { email, password, full_name } = body;
+        if (!email || !password || !full_name) return json({ error: "Email, password, and full_name are required" }, 400);
+        if (password.length < 6) return json({ error: "Password must be at least 6 characters" }, 400);
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+        const tempClient = createClient(supabaseUrl, anonKey, { auth: { autoRefreshToken: false, persistSession: false } });
+        const { data, error } = await tempClient.auth.signUp({
+          email,
+          password,
+          options: { data: { full_name } },
+        });
+        if (error) return json({ error: error.message }, 400);
+        return json({
+          success: true,
+          user_id: data.user?.id,
+          message: "Account created. Check your email to confirm, then use x-email and x-password headers to authenticate.",
+        }, 201);
+      } catch (e) {
+        return json({ error: e.message }, 400);
+      }
+    }
+
+    if (method === "POST" && resourceId === "forgot-password") {
+      try {
+        const body = await req.json();
+        if (!body.email) return json({ error: "Email is required" }, 400);
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+        const tempClient = createClient(supabaseUrl, anonKey, { auth: { autoRefreshToken: false, persistSession: false } });
+        const { error } = await tempClient.auth.resetPasswordForEmail(body.email);
+        if (error) return json({ error: error.message }, 400);
+        return json({ success: true, message: "Password reset email sent" });
+      } catch (e) {
+        return json({ error: e.message }, 400);
+      }
+    }
+
+    return json({ error: "Not Found", auth_endpoints: ["POST /auth/login", "POST /auth/signup", "POST /auth/forgot-password"] }, 404);
   }
 
-  const rateLimitKey = apiKey || authHeader?.slice(0, 40) || "anon";
+  // ── Health (no auth) ──
+  if (resource === "health") {
+    return json({ status: "ok", timestamp: new Date().toISOString(), version: "3.0.0" });
+  }
+
+  // ── Authenticate: email+password headers OR x-api-key (read-only) ──
+  const email = req.headers.get("x-email");
+  const password = req.headers.get("x-password");
+  const apiKey = req.headers.get("x-api-key");
+  const hasApiKey = apiKey && validateApiKey(apiKey);
+  const hasCredentials = email && password;
+
+  if (!hasCredentials && !hasApiKey) {
+    return json({
+      error: "Unauthorized",
+      message: "Provide x-email and x-password headers, or x-api-key header for read-only access",
+    }, 401);
+  }
+
+  // Rate limit
+  const rateLimitKey = email || apiKey || "anon";
   const rl = checkRateLimit(rateLimitKey);
   if (!rl.allowed) {
     return new Response(JSON.stringify({ error: "Rate limit exceeded", retry_after_seconds: rl.resetIn }), {
       status: 429,
-      headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rl.resetIn), "X-RateLimit-Remaining": "0", "X-RateLimit-Reset": String(rl.resetIn) },
+      headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rl.resetIn) },
     });
   }
 
@@ -97,31 +188,37 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, ...rateLimitHeaders, "Content-Type": "application/json" },
     });
 
-  const url = new URL(req.url);
-  const pathParts = url.pathname.replace(/^\/api\/?/, "").split("/").filter(Boolean);
-  const resource = pathParts[0] || "";
-  const resourceId = pathParts[1] || "";
-  const subResource = pathParts[2] || "";
-  const method = req.method;
+  // Sign in user if credentials provided
+  let user: any = null;
+  let userClient: any = null;
+  const adminClient = getAdminClient();
 
-  const effectiveAuth = hasJwt ? authHeader : null;
-  const { userClient, adminClient } = getSupabase(effectiveAuth);
-  const readClient = hasJwt ? userClient : adminClient;
-  const writeClient = userClient;
+  if (hasCredentials) {
+    const authResult = await authWithEmailPassword(email!, password!);
+    if (authResult.error || !authResult.user) {
+      return rj({ error: authResult.error || "Invalid credentials" }, 401);
+    }
+    user = authResult.user;
+    userClient = authResult.userClient;
+  }
+
+  // For API key read-only access, use admin client for reads
+  const readClient = userClient || adminClient;
+  const isReadOnly = !hasCredentials;
+
+  function requireAuth() {
+    if (isReadOnly) return rj({ error: "Write operations require x-email and x-password authentication" }, 403);
+    if (!user) return rj({ error: "Unauthorized" }, 401);
+    return null;
+  }
 
   try {
-    // ── Health ──
-    if (resource === "health") {
-      return rj({ status: "ok", timestamp: new Date().toISOString(), version: "2.0.0" });
-    }
-
     // ── Me ──
     if (resource === "me") {
-      if (!hasJwt) return rj({ error: "/me requires Bearer JWT auth" }, 403);
-      const user = await getUser(writeClient);
-      if (!user) return rj({ error: "Unauthorized" }, 401);
-      const { data: profile } = await writeClient.from("profiles").select("*").eq("user_id", user.id).single();
-      const { data: roles } = await writeClient.from("user_roles").select("role").eq("user_id", user.id);
+      const denied = requireAuth();
+      if (denied) return denied;
+      const { data: profile } = await userClient.from("profiles").select("*").eq("user_id", user.id).single();
+      const { data: roles } = await userClient.from("user_roles").select("role").eq("user_id", user.id);
       return rj({ user: { id: user.id, email: user.email }, profile, roles: (roles || []).map((r: any) => r.role) });
     }
 
@@ -149,9 +246,10 @@ Deno.serve(async (req) => {
         return rj(data);
       }
       if (method === "PUT" && resourceId) {
-        if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
+        const denied = requireAuth();
+        if (denied) return denied;
         const body = await req.json();
-        const { data, error } = await writeClient.from("profiles").update(body).eq("user_id", resourceId).select().single();
+        const { data, error } = await userClient.from("profiles").update(body).eq("user_id", resourceId).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
@@ -172,34 +270,32 @@ Deno.serve(async (req) => {
         return rj(data);
       }
       if (method === "POST" && !resourceId) {
-        if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
+        const denied = requireAuth();
+        if (denied) return denied;
         const body = await req.json();
-        const user = await getUser(writeClient);
-        if (!user) return rj({ error: "Unauthorized" }, 401);
-        const { data, error } = await writeClient.from("posts").insert({ ...body, user_id: user.id }).select().single();
+        const { data, error } = await userClient.from("posts").insert({ ...body, user_id: user.id }).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data, 201);
       }
       if (method === "DELETE" && resourceId && !subResource) {
-        if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-        const { error } = await writeClient.from("posts").delete().eq("id", resourceId);
+        const denied = requireAuth();
+        if (denied) return denied;
+        const { error } = await userClient.from("posts").delete().eq("id", resourceId);
         if (error) return rj({ error: error.message }, 400);
         return rj({ success: true });
       }
       if (resourceId && subResource === "likes") {
         if (method === "POST") {
-          if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-          const user = await getUser(writeClient);
-          if (!user) return rj({ error: "Unauthorized" }, 401);
-          const { data, error } = await writeClient.from("post_likes").insert({ post_id: resourceId, user_id: user.id }).select().single();
+          const denied = requireAuth();
+          if (denied) return denied;
+          const { data, error } = await userClient.from("post_likes").insert({ post_id: resourceId, user_id: user.id }).select().single();
           if (error) return rj({ error: error.message }, 400);
           return rj(data, 201);
         }
         if (method === "DELETE") {
-          if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-          const user = await getUser(writeClient);
-          if (!user) return rj({ error: "Unauthorized" }, 401);
-          const { error } = await writeClient.from("post_likes").delete().eq("post_id", resourceId).eq("user_id", user.id);
+          const denied = requireAuth();
+          if (denied) return denied;
+          const { error } = await userClient.from("post_likes").delete().eq("post_id", resourceId).eq("user_id", user.id);
           if (error) return rj({ error: error.message }, 400);
           return rj({ success: true });
         }
@@ -211,11 +307,10 @@ Deno.serve(async (req) => {
           return rj(data);
         }
         if (method === "POST") {
-          if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-          const user = await getUser(writeClient);
-          if (!user) return rj({ error: "Unauthorized" }, 401);
+          const denied = requireAuth();
+          if (denied) return denied;
           const body = await req.json();
-          const { data, error } = await writeClient.from("comments").insert({ ...body, post_id: resourceId, user_id: user.id }).select().single();
+          const { data, error } = await userClient.from("comments").insert({ ...body, post_id: resourceId, user_id: user.id }).select().single();
           if (error) return rj({ error: error.message }, 400);
           return rj(data, 201);
         }
@@ -239,29 +334,26 @@ Deno.serve(async (req) => {
         return rj(data);
       }
       if (method === "POST" && !resourceId) {
-        if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-        const user = await getUser(writeClient);
-        if (!user) return rj({ error: "Unauthorized" }, 401);
+        const denied = requireAuth();
+        if (denied) return denied;
         const body = await req.json();
-        const { data, error } = await writeClient.from("events").insert({ ...body, created_by: user.id }).select().single();
+        const { data, error } = await userClient.from("events").insert({ ...body, created_by: user.id }).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data, 201);
       }
       if (resourceId && subResource === "rsvp") {
         if (method === "POST") {
-          if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-          const user = await getUser(writeClient);
-          if (!user) return rj({ error: "Unauthorized" }, 401);
+          const denied = requireAuth();
+          if (denied) return denied;
           const body = await req.json();
-          const { data, error } = await writeClient.from("event_rsvps").insert({ event_id: resourceId, user_id: user.id, status: body.status || "going" }).select().single();
+          const { data, error } = await userClient.from("event_rsvps").insert({ event_id: resourceId, user_id: user.id, status: body.status || "going" }).select().single();
           if (error) return rj({ error: error.message }, 400);
           return rj(data, 201);
         }
         if (method === "DELETE") {
-          if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-          const user = await getUser(writeClient);
-          if (!user) return rj({ error: "Unauthorized" }, 401);
-          const { error } = await writeClient.from("event_rsvps").delete().eq("event_id", resourceId).eq("user_id", user.id);
+          const denied = requireAuth();
+          if (denied) return denied;
+          const { error } = await userClient.from("event_rsvps").delete().eq("event_id", resourceId).eq("user_id", user.id);
           if (error) return rj({ error: error.message }, 400);
           return rj({ success: true });
         }
@@ -277,12 +369,11 @@ Deno.serve(async (req) => {
 
     // ── Messages ──
     if (resource === "messages") {
-      if (!hasJwt) return rj({ error: "Messages require Bearer JWT auth" }, 403);
+      const denied = requireAuth();
+      if (denied) return denied;
       if (method === "GET") {
-        const user = await getUser(writeClient);
-        if (!user) return rj({ error: "Unauthorized" }, 401);
         const partner = url.searchParams.get("partner_id");
-        let q = writeClient.from("messages").select("*").order("created_at", { ascending: true });
+        let q = userClient.from("messages").select("*").order("created_at", { ascending: true });
         if (partner) {
           q = q.or(`and(sender_id.eq.${user.id},receiver_id.eq.${partner}),and(sender_id.eq.${partner},receiver_id.eq.${user.id})`);
         }
@@ -291,15 +382,13 @@ Deno.serve(async (req) => {
         return rj(data);
       }
       if (method === "POST") {
-        const user = await getUser(writeClient);
-        if (!user) return rj({ error: "Unauthorized" }, 401);
         const body = await req.json();
-        const { data, error } = await writeClient.from("messages").insert({ ...body, sender_id: user.id }).select().single();
+        const { data, error } = await userClient.from("messages").insert({ ...body, sender_id: user.id }).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data, 201);
       }
       if (method === "PUT" && resourceId) {
-        const { data, error } = await writeClient.from("messages").update({ is_read: true, read_at: new Date().toISOString() }).eq("id", resourceId).select().single();
+        const { data, error } = await userClient.from("messages").update({ is_read: true, read_at: new Date().toISOString() }).eq("id", resourceId).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
@@ -307,20 +396,19 @@ Deno.serve(async (req) => {
 
     // ── Notifications ──
     if (resource === "notifications") {
-      if (!hasJwt) return rj({ error: "Notifications require Bearer JWT auth" }, 403);
+      const denied = requireAuth();
+      if (denied) return denied;
       if (method === "GET") {
-        const user = await getUser(writeClient);
-        if (!user) return rj({ error: "Unauthorized" }, 401);
         const limit = parseInt(url.searchParams.get("limit") || "20");
         const unreadOnly = url.searchParams.get("unread") === "true";
-        let q = writeClient.from("notifications").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(limit);
+        let q = userClient.from("notifications").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(limit);
         if (unreadOnly) q = q.eq("is_read", false);
         const { data, error } = await q;
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
       if (method === "PUT" && resourceId) {
-        const { data, error } = await writeClient.from("notifications").update({ is_read: true }).eq("id", resourceId).select().single();
+        const { data, error } = await userClient.from("notifications").update({ is_read: true }).eq("id", resourceId).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
@@ -345,18 +433,18 @@ Deno.serve(async (req) => {
         return rj(data);
       }
       if (method === "POST") {
-        if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-        const user = await getUser(writeClient);
-        if (!user) return rj({ error: "Unauthorized" }, 401);
+        const denied = requireAuth();
+        if (denied) return denied;
         const body = await req.json();
-        const { data, error } = await writeClient.from("opportunities").insert({ ...body, posted_by: user.id }).select().single();
+        const { data, error } = await userClient.from("opportunities").insert({ ...body, posted_by: user.id }).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data, 201);
       }
       if (method === "PUT" && resourceId) {
-        if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
+        const denied = requireAuth();
+        if (denied) return denied;
         const body = await req.json();
-        const { data, error } = await writeClient.from("opportunities").update(body).eq("id", resourceId).select().single();
+        const { data, error } = await userClient.from("opportunities").update(body).eq("id", resourceId).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
@@ -379,22 +467,21 @@ Deno.serve(async (req) => {
         return rj(data);
       }
       if (method === "POST" && !resourceId) {
-        if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-        const user = await getUser(writeClient);
-        if (!user) return rj({ error: "Unauthorized" }, 401);
+        const denied = requireAuth();
+        if (denied) return denied;
         const body = await req.json();
-        const { data, error } = await writeClient.from("campaigns").insert({ ...body, created_by: user.id }).select().single();
+        const { data, error } = await userClient.from("campaigns").insert({ ...body, created_by: user.id }).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data, 201);
       }
       if (method === "PUT" && resourceId) {
-        if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
+        const denied = requireAuth();
+        if (denied) return denied;
         const body = await req.json();
-        const { data, error } = await writeClient.from("campaigns").update(body).eq("id", resourceId).select().single();
+        const { data, error } = await userClient.from("campaigns").update(body).eq("id", resourceId).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
-      // Sub-resource: donations for a campaign
       if (resourceId && subResource === "donations") {
         if (method === "GET") {
           const { data, error } = await readClient.from("donations").select("*").eq("campaign_id", resourceId).order("created_at", { ascending: false });
@@ -402,11 +489,10 @@ Deno.serve(async (req) => {
           return rj(data);
         }
         if (method === "POST") {
-          if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-          const user = await getUser(writeClient);
-          if (!user) return rj({ error: "Unauthorized" }, 401);
+          const denied = requireAuth();
+          if (denied) return denied;
           const body = await req.json();
-          const { data, error } = await writeClient.from("donations").insert({ ...body, campaign_id: resourceId, user_id: user.id }).select().single();
+          const { data, error } = await userClient.from("donations").insert({ ...body, campaign_id: resourceId, user_id: user.id }).select().single();
           if (error) return rj({ error: error.message }, 400);
           return rj(data, 201);
         }
@@ -415,11 +501,10 @@ Deno.serve(async (req) => {
 
     // ── Donations ──
     if (resource === "donations") {
-      if (!hasJwt) return rj({ error: "Donations require Bearer JWT auth" }, 403);
+      const denied = requireAuth();
+      if (denied) return denied;
       if (method === "GET") {
-        const user = await getUser(writeClient);
-        if (!user) return rj({ error: "Unauthorized" }, 401);
-        const { data, error } = await writeClient.from("donations").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+        const { data, error } = await userClient.from("donations").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
@@ -427,12 +512,11 @@ Deno.serve(async (req) => {
 
     // ── Connections ──
     if (resource === "connections") {
-      if (!hasJwt) return rj({ error: "Connections require Bearer JWT auth" }, 403);
-      const user = await getUser(writeClient);
-      if (!user) return rj({ error: "Unauthorized" }, 401);
+      const denied = requireAuth();
+      if (denied) return denied;
       if (method === "GET") {
         const status = url.searchParams.get("status");
-        let q = writeClient.from("connections").select("*").or(`source_user_id.eq.${user.id},target_user_id.eq.${user.id}`).order("created_at", { ascending: false });
+        let q = userClient.from("connections").select("*").or(`source_user_id.eq.${user.id},target_user_id.eq.${user.id}`).order("created_at", { ascending: false });
         if (status) q = q.eq("status", status);
         const { data, error } = await q;
         if (error) return rj({ error: error.message }, 400);
@@ -440,18 +524,18 @@ Deno.serve(async (req) => {
       }
       if (method === "POST") {
         const body = await req.json();
-        const { data, error } = await writeClient.from("connections").insert({ ...body, source_user_id: user.id }).select().single();
+        const { data, error } = await userClient.from("connections").insert({ ...body, source_user_id: user.id }).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data, 201);
       }
       if (method === "PUT" && resourceId) {
         const body = await req.json();
-        const { data, error } = await writeClient.from("connections").update({ status: body.status }).eq("id", resourceId).select().single();
+        const { data, error } = await userClient.from("connections").update({ status: body.status }).eq("id", resourceId).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
       if (method === "DELETE" && resourceId) {
-        const { error } = await writeClient.from("connections").delete().eq("id", resourceId);
+        const { error } = await userClient.from("connections").delete().eq("id", resourceId);
         if (error) return rj({ error: error.message }, 400);
         return rj({ success: true });
       }
@@ -475,28 +559,28 @@ Deno.serve(async (req) => {
         return rj(data);
       }
       if (method === "POST" && !resourceId) {
-        if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-        const user = await getUser(writeClient);
-        if (!user) return rj({ error: "Unauthorized" }, 401);
+        const denied = requireAuth();
+        if (denied) return denied;
         const body = await req.json();
-        const { data, error } = await writeClient.from("forum_posts").insert({ ...body, user_id: user.id }).select().single();
+        const { data, error } = await userClient.from("forum_posts").insert({ ...body, user_id: user.id }).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data, 201);
       }
       if (method === "PUT" && resourceId && !subResource) {
-        if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
+        const denied = requireAuth();
+        if (denied) return denied;
         const body = await req.json();
-        const { data, error } = await writeClient.from("forum_posts").update(body).eq("id", resourceId).select().single();
+        const { data, error } = await userClient.from("forum_posts").update(body).eq("id", resourceId).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
       if (method === "DELETE" && resourceId && !subResource) {
-        if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-        const { error } = await writeClient.from("forum_posts").delete().eq("id", resourceId);
+        const denied = requireAuth();
+        if (denied) return denied;
+        const { error } = await userClient.from("forum_posts").delete().eq("id", resourceId);
         if (error) return rj({ error: error.message }, 400);
         return rj({ success: true });
       }
-      // Forum replies
       if (resourceId && subResource === "replies") {
         if (method === "GET") {
           const { data, error } = await readClient.from("forum_replies").select("*").eq("post_id", resourceId).order("created_at");
@@ -504,11 +588,10 @@ Deno.serve(async (req) => {
           return rj(data);
         }
         if (method === "POST") {
-          if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-          const user = await getUser(writeClient);
-          if (!user) return rj({ error: "Unauthorized" }, 401);
+          const denied = requireAuth();
+          if (denied) return denied;
           const body = await req.json();
-          const { data, error } = await writeClient.from("forum_replies").insert({ content: body.content, post_id: resourceId, user_id: user.id }).select().single();
+          const { data, error } = await userClient.from("forum_replies").insert({ content: body.content, post_id: resourceId, user_id: user.id }).select().single();
           if (error) return rj({ error: error.message }, 400);
           return rj(data, 201);
         }
@@ -532,18 +615,18 @@ Deno.serve(async (req) => {
         return rj(data);
       }
       if (method === "POST") {
-        if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-        const user = await getUser(writeClient);
-        if (!user) return rj({ error: "Unauthorized" }, 401);
+        const denied = requireAuth();
+        if (denied) return denied;
         const body = await req.json();
-        const { data, error } = await writeClient.from("success_stories").insert({ ...body, user_id: user.id }).select().single();
+        const { data, error } = await userClient.from("success_stories").insert({ ...body, user_id: user.id }).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data, 201);
       }
       if (method === "PUT" && resourceId) {
-        if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
+        const denied = requireAuth();
+        if (denied) return denied;
         const body = await req.json();
-        const { data, error } = await writeClient.from("success_stories").update(body).eq("id", resourceId).select().single();
+        const { data, error } = await userClient.from("success_stories").update(body).eq("id", resourceId).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
@@ -571,17 +654,17 @@ Deno.serve(async (req) => {
         return rj(data);
       }
       if (method === "POST") {
-        if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-        const user = await getUser(writeClient);
-        if (!user) return rj({ error: "Unauthorized" }, 401);
+        const denied = requireAuth();
+        if (denied) return denied;
         const body = await req.json();
-        const { data, error } = await writeClient.from("stories").insert({ ...body, user_id: user.id }).select().single();
+        const { data, error } = await userClient.from("stories").insert({ ...body, user_id: user.id }).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data, 201);
       }
       if (method === "DELETE" && resourceId) {
-        if (!hasJwt) return rj({ error: "Write operations require Bearer JWT auth" }, 403);
-        const { error } = await writeClient.from("stories").delete().eq("id", resourceId);
+        const denied = requireAuth();
+        if (denied) return denied;
+        const { error } = await userClient.from("stories").delete().eq("id", resourceId);
         if (error) return rj({ error: error.message }, 400);
         return rj({ success: true });
       }
@@ -589,23 +672,22 @@ Deno.serve(async (req) => {
 
     // ── Referrals ──
     if (resource === "referrals") {
-      if (!hasJwt) return rj({ error: "Referrals require Bearer JWT auth" }, 403);
-      const user = await getUser(writeClient);
-      if (!user) return rj({ error: "Unauthorized" }, 401);
+      const denied = requireAuth();
+      if (denied) return denied;
       if (method === "GET") {
-        const { data, error } = await writeClient.from("referral_requests").select("*").order("created_at", { ascending: false });
+        const { data, error } = await userClient.from("referral_requests").select("*").order("created_at", { ascending: false });
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
       if (method === "POST") {
         const body = await req.json();
-        const { data, error } = await writeClient.from("referral_requests").insert({ ...body, requester_id: user.id }).select().single();
+        const { data, error } = await userClient.from("referral_requests").insert({ ...body, requester_id: user.id }).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data, 201);
       }
       if (method === "PUT" && resourceId) {
         const body = await req.json();
-        const { data, error } = await writeClient.from("referral_requests").update({ status: body.status }).eq("id", resourceId).select().single();
+        const { data, error } = await userClient.from("referral_requests").update({ status: body.status }).eq("id", resourceId).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
@@ -613,17 +695,16 @@ Deno.serve(async (req) => {
 
     // ── Verification Requests ──
     if (resource === "verification") {
-      if (!hasJwt) return rj({ error: "Verification requires Bearer JWT auth" }, 403);
-      const user = await getUser(writeClient);
-      if (!user) return rj({ error: "Unauthorized" }, 401);
+      const denied = requireAuth();
+      if (denied) return denied;
       if (method === "GET") {
-        const { data, error } = await writeClient.from("verification_requests").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+        const { data, error } = await userClient.from("verification_requests").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
       if (method === "POST") {
         const body = await req.json();
-        const { data, error } = await writeClient.from("verification_requests").insert({ ...body, user_id: user.id }).select().single();
+        const { data, error } = await userClient.from("verification_requests").insert({ ...body, user_id: user.id }).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data, 201);
       }
@@ -639,33 +720,33 @@ Deno.serve(async (req) => {
 
     // ── Mailing Campaigns (admin only via RLS) ──
     if (resource === "mailing-campaigns") {
-      if (!hasJwt) return rj({ error: "Mailing campaigns require Bearer JWT auth" }, 403);
-      const user = await getUser(writeClient);
-      if (!user) return rj({ error: "Unauthorized" }, 401);
+      const denied = requireAuth();
+      if (denied) return denied;
       if (method === "GET") {
-        const { data, error } = await writeClient.from("mailing_campaigns").select("*").order("created_at", { ascending: false });
+        const { data, error } = await userClient.from("mailing_campaigns").select("*").order("created_at", { ascending: false });
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
       if (method === "POST") {
         const body = await req.json();
-        const { data, error } = await writeClient.from("mailing_campaigns").insert({ ...body, created_by: user.id }).select().single();
+        const { data, error } = await userClient.from("mailing_campaigns").insert({ ...body, created_by: user.id }).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data, 201);
       }
       if (method === "PUT" && resourceId) {
         const body = await req.json();
-        const { data, error } = await writeClient.from("mailing_campaigns").update(body).eq("id", resourceId).select().single();
+        const { data, error } = await userClient.from("mailing_campaigns").update(body).eq("id", resourceId).select().single();
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
     }
 
-    // ── User Roles (admin read) ──
+    // ── User Roles ──
     if (resource === "roles") {
-      if (!hasJwt) return rj({ error: "Roles require Bearer JWT auth" }, 403);
+      const denied = requireAuth();
+      if (denied) return denied;
       if (method === "GET" && resourceId) {
-        const { data, error } = await writeClient.from("user_roles").select("*").eq("user_id", resourceId);
+        const { data, error } = await userClient.from("user_roles").select("*").eq("user_id", resourceId);
         if (error) return rj({ error: error.message }, 400);
         return rj(data);
       }
@@ -675,27 +756,31 @@ Deno.serve(async (req) => {
     return rj({
       error: "Not Found",
       docs: "/api-docs",
-      endpoints: [
-        "GET /health", "GET /me",
-        "GET/POST /profiles", "GET/PUT /profiles/:id",
-        "GET/POST /posts", "GET/DELETE /posts/:id", "POST/DELETE /posts/:id/likes", "GET/POST /posts/:id/comments",
-        "GET/POST /events", "GET /events/:id", "POST/DELETE /events/:id/rsvp", "GET /events/:id/attendees",
-        "GET/POST /messages", "PUT /messages/:id",
-        "GET /notifications", "PUT /notifications/:id",
-        "GET/POST /opportunities", "GET/PUT /opportunities/:id",
-        "GET/POST /campaigns", "GET/PUT /campaigns/:id", "GET/POST /campaigns/:id/donations",
-        "GET /donations",
-        "GET/POST/PUT/DELETE /connections",
-        "GET/POST /forum", "GET/PUT/DELETE /forum/:id", "GET/POST /forum/:id/replies",
-        "GET/POST /success-stories", "GET/PUT /success-stories/:id",
-        "GET /institutions", "GET /institutions/:id",
-        "GET/POST/DELETE /stories",
-        "GET/POST /referrals", "PUT /referrals/:id",
-        "GET/POST /verification",
-        "GET /leaderboard",
-        "GET/POST/PUT /mailing-campaigns",
-        "GET /roles/:userId",
-      ],
+      auth_info: "Use x-email and x-password headers for authentication, or x-api-key for read-only access",
+      endpoints: {
+        auth: ["POST /auth/login (body: {email, password})", "POST /auth/signup (body: {email, password, full_name})", "POST /auth/forgot-password (body: {email})"],
+        resources: [
+          "GET /health", "GET /me",
+          "GET/POST /profiles", "GET/PUT /profiles/:id",
+          "GET/POST /posts", "GET/DELETE /posts/:id", "POST/DELETE /posts/:id/likes", "GET/POST /posts/:id/comments",
+          "GET/POST /events", "GET /events/:id", "POST/DELETE /events/:id/rsvp", "GET /events/:id/attendees",
+          "GET/POST /messages", "PUT /messages/:id",
+          "GET /notifications", "PUT /notifications/:id",
+          "GET/POST /opportunities", "GET/PUT /opportunities/:id",
+          "GET/POST /campaigns", "GET/PUT /campaigns/:id", "GET/POST /campaigns/:id/donations",
+          "GET /donations",
+          "GET/POST/PUT/DELETE /connections",
+          "GET/POST /forum", "GET/PUT/DELETE /forum/:id", "GET/POST /forum/:id/replies",
+          "GET/POST /success-stories", "GET/PUT /success-stories/:id",
+          "GET /institutions", "GET /institutions/:id",
+          "GET/POST/DELETE /stories",
+          "GET/POST /referrals", "PUT /referrals/:id",
+          "GET/POST /verification",
+          "GET /leaderboard",
+          "GET/POST/PUT /mailing-campaigns",
+          "GET /roles/:userId",
+        ],
+      },
     }, 404);
   } catch (e) {
     return rj({ error: e.message || "Internal Server Error" }, 500);
