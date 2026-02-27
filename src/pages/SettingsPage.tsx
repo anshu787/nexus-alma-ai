@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Settings, User, Bell, Shield, LogOut, Save, Loader2, Eye, EyeOff,
-  Camera, Trash2, Lock
+  Camera, Trash2, Lock, Phone, Key, Copy
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,6 +88,8 @@ export default function SettingsPage() {
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ newPassword: "", confirmPassword: "" });
   const [showPassword, setShowPassword] = useState(false);
+  const [accessCode, setAccessCode] = useState<{ access_code: string; expires_at: string } | null>(null);
+  const [generatingCode, setGeneratingCode] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -130,6 +132,22 @@ export default function SettingsPage() {
       setLoading(false);
     };
     load();
+
+    // Load voice access code
+    const loadAccessCode = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from("voice_access_codes")
+        .select("access_code, expires_at")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .gt("expires_at", new Date().toISOString())
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+      if (data) setAccessCode(data);
+    };
+    loadAccessCode();
   }, [user]);
 
   const saveProfile = async () => {
@@ -185,6 +203,20 @@ export default function SettingsPage() {
       setShowPasswordDialog(false);
       setPasswordForm({ newPassword: "", confirmPassword: "" });
     }
+  };
+
+  const generateAccessCode = async () => {
+    if (!user) return;
+    setGeneratingCode(true);
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    await supabase.from("voice_access_codes").update({ is_active: false }).eq("user_id", user.id);
+    const { data, error } = await supabase.from("voice_access_codes").insert({
+      user_id: user.id, access_code: code, expires_at: expiresAt,
+    }).select("access_code, expires_at").single();
+    if (error) toast.error("Failed to generate access code");
+    else { setAccessCode(data); toast.success("Voice access code generated!"); }
+    setGeneratingCode(false);
   };
 
   const handleSignOut = async () => {
@@ -510,6 +542,35 @@ export default function SettingsPage() {
                   </Dialog>
                 </div>
               </div>
+            </div>
+
+            {/* Voice Access Code */}
+            <div className="bg-card border border-border rounded-xl p-6 shadow-card space-y-4">
+              <h3 className="font-heading font-semibold text-card-foreground flex items-center gap-2">
+                <Phone className="h-4 w-4 text-accent" /> Voice Access Code
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Use this 6-digit code when calling the platform to authenticate your voice session.
+              </p>
+              {accessCode ? (
+                <div className="bg-secondary rounded-xl p-5 text-center space-y-2">
+                  <p className="text-3xl font-mono font-bold text-foreground tracking-[0.5em]">
+                    {accessCode.access_code}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Expires {new Date(accessCode.expires_at).toLocaleDateString()}
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(accessCode.access_code); toast.success("Copied!"); }}>
+                    <Copy className="h-4 w-4" /> Copy Code
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-3">No active access code</p>
+              )}
+              <Button variant="hero" size="sm" onClick={generateAccessCode} disabled={generatingCode} className="w-full">
+                {generatingCode ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
+                {generatingCode ? "Generating..." : "Generate New Code"}
+              </Button>
             </div>
 
             <div className="bg-card border border-border rounded-xl p-6 shadow-card space-y-4">
