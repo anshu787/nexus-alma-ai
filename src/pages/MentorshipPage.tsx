@@ -45,7 +45,10 @@ export default function MentorshipPage() {
   useEffect(() => {
     if (!user) return;
     supabase.from("user_embeddings").select("id").eq("user_id", user.id).maybeSingle()
-      .then(({ data }) => setHasEmbedding(!!data));
+      .then(({ data }) => {
+        setHasEmbedding(!!data);
+      });
+    findMentors();
   }, [user]);
 
   const generateEmbedding = async () => {
@@ -112,7 +115,8 @@ export default function MentorshipPage() {
     }
   };
 
-  useEffect(() => { if (hasEmbedding) findMentors(); }, [hasEmbedding]);
+  // Re-find after embedding is generated
+  useEffect(() => { if (hasEmbedding === true) findMentors(); }, [hasEmbedding]);
 
   return (
     <div className="space-y-6">
