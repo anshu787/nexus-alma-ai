@@ -608,6 +608,101 @@ export type Database = {
         }
         Relationships: []
       }
+      mentor_availability: {
+        Row: {
+          created_at: string
+          current_bookings: number
+          description: string | null
+          end_time: string
+          id: string
+          is_active: boolean
+          max_bookings: number
+          meeting_link: string | null
+          mentor_id: string
+          slot_date: string
+          start_time: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_bookings?: number
+          description?: string | null
+          end_time: string
+          id?: string
+          is_active?: boolean
+          max_bookings?: number
+          meeting_link?: string | null
+          mentor_id: string
+          slot_date: string
+          start_time: string
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_bookings?: number
+          description?: string | null
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          max_bookings?: number
+          meeting_link?: string | null
+          mentor_id?: string
+          slot_date?: string
+          start_time?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      mentoring_sessions: {
+        Row: {
+          availability_id: string
+          created_at: string
+          id: string
+          mentor_feedback: string | null
+          mentor_id: string
+          notes: string | null
+          status: string
+          student_id: string
+          student_message: string | null
+          updated_at: string
+        }
+        Insert: {
+          availability_id: string
+          created_at?: string
+          id?: string
+          mentor_feedback?: string | null
+          mentor_id: string
+          notes?: string | null
+          status?: string
+          student_id: string
+          student_message?: string | null
+          updated_at?: string
+        }
+        Update: {
+          availability_id?: string
+          created_at?: string
+          id?: string
+          mentor_feedback?: string | null
+          mentor_id?: string
+          notes?: string | null
+          status?: string
+          student_id?: string
+          student_message?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mentoring_sessions_availability_id_fkey"
+            columns: ["availability_id"]
+            isOneToOne: false
+            referencedRelation: "mentor_availability"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           content: string
