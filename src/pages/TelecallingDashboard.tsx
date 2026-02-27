@@ -157,6 +157,29 @@ export default function TelecallingDashboard() {
   useEffect(() => {
     fetchSessions();
     fetchAccessCode();
+
+    // Realtime subscription for live call monitoring
+    const channel = supabase
+      .channel('call-sessions-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'call_sessions' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setSessions(prev => {
+              const newSession = payload.new as CallSession;
+              return [newSession, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            setSessions(prev =>
+              prev.map(s => s.id === (payload.new as CallSession).id ? { ...s, ...payload.new as CallSession } : s)
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [user]);
 
   useEffect(() => {
