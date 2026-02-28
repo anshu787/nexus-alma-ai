@@ -12,6 +12,7 @@ import STTPanel from "@/components/telecalling/STTPanel";
 import OutboundScheduler from "@/components/telecalling/OutboundScheduler";
 import CallAnalyticsCharts from "@/components/telecalling/CallAnalyticsCharts";
 import AgentSetupGuide from "@/components/telecalling/AgentSetupGuide";
+import OutboundCallPanel from "@/components/telecalling/OutboundCallPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -247,7 +248,8 @@ export default function TelecallingDashboard() {
         </TabsContent>
 
         {/* Outbound Scheduling */}
-        <TabsContent value="outbound">
+        <TabsContent value="outbound" className="space-y-4">
+          <OutboundCallPanel />
           <OutboundScheduler />
         </TabsContent>
 
