@@ -8,6 +8,7 @@ import CallTranscript, { TranscriptMessage } from "@/components/ai-call/CallTran
 import CallControls from "@/components/ai-call/CallControls";
 import { useWebSpeech } from "@/hooks/useWebSpeech";
 import { useIntentEngine } from "@/hooks/useIntentEngine";
+import { moderateContent } from "@/lib/contentModerator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -53,13 +54,22 @@ export default function AICallPage() {
       if (processingRef.current) return;
       processingRef.current = true;
 
+      // Check for negative institutional content first
+      const moderation = moderateContent(text);
+      if (moderation.isNegativeInstitutional) {
+        const positiveResponse = `I understand your feelings. ${moderation.moderatedText} ${moderation.moderationNote}`;
+        addMessage("assistant", positiveResponse);
+        await speech.speak(positiveResponse);
+        processingRef.current = false;
+        return;
+      }
+
       const detected = detectIntent(text);
       if (detected) {
         const result = await executeIntent(detected.intent, detected.params);
         addMessage("assistant", result.response);
         await speech.speak(result.response);
       } else {
-        // Generic fallback
         const fallback =
           "I can help you update your skills, find mentors, check opportunities, browse events, schedule mentorship sessions, send messages, or create posts. Just tell me what you'd like to do.";
         addMessage("assistant", fallback);
