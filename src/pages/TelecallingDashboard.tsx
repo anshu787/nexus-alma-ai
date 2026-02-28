@@ -4,9 +4,11 @@ import {
   Phone, PhoneCall, PhoneOff, PhoneIncoming, PhoneOutgoing,
   Activity, Clock, Users, Shield, Loader2, Copy, RefreshCw,
   MessageSquare, UserCog, Calendar, Mic, BarChart3, CheckCircle2,
-  AlertTriangle, Key, Send
+  AlertTriangle, Key, Send, Radio, Volume2, FileText
 } from "lucide-react";
-import OutboundScheduler from "@/components/telecalling/OutboundScheduler";
+import ElevenLabsVoiceAgent from "@/components/telecalling/ElevenLabsVoiceAgent";
+import TTSPanel from "@/components/telecalling/TTSPanel";
+import STTPanel from "@/components/telecalling/STTPanel";
 import CallAnalyticsCharts from "@/components/telecalling/CallAnalyticsCharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,14 +44,6 @@ interface CallActionLog {
   created_at: string;
 }
 
-interface AccessCode {
-  id: string;
-  user_id: string;
-  access_code: string;
-  is_active: boolean;
-  expires_at: string;
-}
-
 const statusColors: Record<string, string> = {
   initiated: "bg-info/10 text-info border-info/20",
   greeting: "bg-info/10 text-info border-info/20",
@@ -83,9 +77,7 @@ export default function TelecallingDashboard() {
   const { user } = useAuth();
   const [sessions, setSessions] = useState<CallSession[]>([]);
   const [actionLogs, setActionLogs] = useState<CallActionLog[]>([]);
-  const [accessCode, setAccessCode] = useState<AccessCode | null>(null);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [userRoles, setUserRoles] = useState<string[]>([]);
 
@@ -106,7 +98,6 @@ export default function TelecallingDashboard() {
       .limit(50);
 
     if (data) {
-      // Get user names
       const userIds = [...new Set(data.filter(d => d.user_id).map(d => d.user_id!))];
       const { data: profiles } = userIds.length > 0
         ? await supabase.from("profiles").select("user_id, full_name").in("user_id", userIds)
@@ -127,49 +118,9 @@ export default function TelecallingDashboard() {
     if (data) setActionLogs(data);
   };
 
-  const fetchAccessCode = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from("voice_access_codes")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("is_active", true)
-      .gt("expires_at", new Date().toISOString())
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
-    if (data) setAccessCode(data);
-  };
-
-  const generateAccessCode = async () => {
-    if (!user) return;
-    setGenerating(true);
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
-    // Deactivate old codes
-    await supabase.from("voice_access_codes").update({ is_active: false }).eq("user_id", user.id);
-
-    const { data, error } = await supabase.from("voice_access_codes").insert({
-      user_id: user.id,
-      access_code: code,
-      expires_at: expiresAt,
-    }).select().single();
-
-    if (error) {
-      toast.error("Failed to generate access code");
-    } else {
-      setAccessCode(data);
-      toast.success("Access code generated!");
-    }
-    setGenerating(false);
-  };
-
   useEffect(() => {
     fetchSessions();
-    fetchAccessCode();
 
-    // Realtime subscription for live call monitoring
     const channel = supabase
       .channel('call-sessions-realtime')
       .on(
@@ -177,10 +128,7 @@ export default function TelecallingDashboard() {
         { event: '*', schema: 'public', table: 'call_sessions' },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            setSessions(prev => {
-              const newSession = payload.new as CallSession;
-              return [newSession, ...prev];
-            });
+            setSessions(prev => [payload.new as CallSession, ...prev]);
           } else if (payload.eventType === 'UPDATE') {
             setSessions(prev =>
               prev.map(s => s.id === (payload.new as CallSession).id ? { ...s, ...payload.new as CallSession } : s)
@@ -206,70 +154,27 @@ export default function TelecallingDashboard() {
     return acc;
   }, {} as Record<string, number>);
 
-  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-webhook/incoming`;
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
-            <Phone className="h-6 w-6 text-accent" /> Telecalling Intelligence
+            <Radio className="h-6 w-6 text-accent" /> Voice Intelligence
           </h1>
-          <p className="text-muted-foreground text-sm">Voice-based AI operator for alumni platform</p>
+          <p className="text-muted-foreground text-sm">AI-powered voice agent, TTS & STT powered by ElevenLabs</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={fetchSessions}>
-            <RefreshCw className="h-4 w-4" /> Refresh
-          </Button>
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="hero" size="sm"><Key className="h-4 w-4" /> My Access Code</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Voice Access Code</DialogTitle></DialogHeader>
-              <div className="space-y-4 mt-2">
-                <p className="text-sm text-muted-foreground">
-                  Use this 6-digit code when calling the platform to authenticate your voice session.
-                </p>
-                {accessCode ? (
-                  <div className="bg-secondary rounded-xl p-6 text-center space-y-3">
-                    <p className="text-4xl font-mono font-bold text-foreground tracking-[0.5em]">
-                      {accessCode.access_code}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Expires {new Date(accessCode.expires_at).toLocaleDateString()}
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => { navigator.clipboard.writeText(accessCode.access_code); toast.success("Copied!"); }}
-                    >
-                      <Copy className="h-4 w-4" /> Copy Code
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="text-center py-4">
-                    <p className="text-sm text-muted-foreground mb-3">No active access code</p>
-                  </div>
-                )}
-                <Button variant="hero" className="w-full" onClick={generateAccessCode} disabled={generating}>
-                  {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
-                  {generating ? "Generating..." : "Generate New Code"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
+        <Button variant="outline" size="sm" onClick={fetchSessions}>
+          <RefreshCw className="h-4 w-4" /> Refresh
+        </Button>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { icon: PhoneCall, label: "Active Calls", value: activeSessions.length, color: "bg-success/10 text-success" },
-          { icon: Phone, label: "Total Calls", value: sessions.length, color: "bg-primary/10 text-primary" },
+          { icon: PhoneCall, label: "Active Sessions", value: activeSessions.length, color: "bg-success/10 text-success" },
+          { icon: Phone, label: "Total Sessions", value: sessions.length, color: "bg-primary/10 text-primary" },
           { icon: CheckCircle2, label: "Completed", value: completedSessions.length, color: "bg-info/10 text-info" },
           { icon: Clock, label: "Total Duration", value: formatDuration(totalDuration), color: "bg-accent/10 text-accent" },
-          { icon: Activity, label: "Intents Processed", value: Object.values(intentCounts).reduce((a, b) => a + b, 0), color: "bg-warning/10 text-warning" },
         ].map((stat, i) => (
           <motion.div
             key={i}
@@ -287,33 +192,30 @@ export default function TelecallingDashboard() {
         ))}
       </div>
 
-      {/* Twilio Setup Info - Admin Only */}
-      {isAdmin && (
-        <div className="bg-card border border-border rounded-xl p-4 shadow-card">
-          <h3 className="font-heading font-semibold text-sm text-card-foreground flex items-center gap-2 mb-2">
-            <Shield className="h-4 w-4 text-accent" /> Twilio Webhook Configuration
-          </h3>
-          <p className="text-xs text-muted-foreground mb-2">
-            Configure your Twilio phone number's voice webhook URL to:
-          </p>
-          <div className="flex items-center gap-2">
-            <code className="bg-secondary px-3 py-2 rounded-lg text-xs text-foreground flex-1 truncate">
-              {webhookUrl}
-            </code>
-            <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(webhookUrl); toast.success("URL copied!"); }}>
-              <Copy className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
-
-      <Tabs defaultValue="sessions" className="space-y-4">
+      <Tabs defaultValue="agent" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="sessions">Call Sessions</TabsTrigger>
-          {isAdmin && <TabsTrigger value="outbound">Outbound Calls</TabsTrigger>}
+          <TabsTrigger value="agent"><Radio className="h-3.5 w-3.5 mr-1" /> Voice Agent</TabsTrigger>
+          <TabsTrigger value="tts"><Volume2 className="h-3.5 w-3.5 mr-1" /> TTS</TabsTrigger>
+          <TabsTrigger value="stt"><FileText className="h-3.5 w-3.5 mr-1" /> STT</TabsTrigger>
+          <TabsTrigger value="sessions">Sessions</TabsTrigger>
           {isAdmin && <TabsTrigger value="analytics">Analytics</TabsTrigger>}
-          {isAdmin && <TabsTrigger value="intents">Intent Analytics</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="intents">Intents</TabsTrigger>}
         </TabsList>
+
+        {/* Voice Agent */}
+        <TabsContent value="agent">
+          <ElevenLabsVoiceAgent />
+        </TabsContent>
+
+        {/* TTS */}
+        <TabsContent value="tts">
+          <TTSPanel />
+        </TabsContent>
+
+        {/* STT */}
+        <TabsContent value="stt">
+          <STTPanel />
+        </TabsContent>
 
         {/* Sessions */}
         <TabsContent value="sessions" className="space-y-3">
@@ -322,8 +224,8 @@ export default function TelecallingDashboard() {
           ) : sessions.length === 0 ? (
             <div className="text-center py-12">
               <Phone className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">No call sessions yet</p>
-              <p className="text-xs text-muted-foreground mt-1">Calls will appear here when users dial your Twilio number.</p>
+              <p className="text-sm text-muted-foreground">No voice sessions yet</p>
+              <p className="text-xs text-muted-foreground mt-1">Start a voice agent conversation to see sessions here.</p>
             </div>
           ) : (
             sessions.map((session, i) => {
@@ -360,9 +262,6 @@ export default function TelecallingDashboard() {
                         {session.duration_seconds && (
                           <span className="text-[10px] text-muted-foreground">Duration: {formatDuration(session.duration_seconds)}</span>
                         )}
-                        {session.twilio_call_sid && (
-                          <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[120px]">{session.twilio_call_sid}</span>
-                        )}
                       </div>
                     </div>
                     {session.recording_url && (
@@ -372,7 +271,6 @@ export default function TelecallingDashboard() {
                     )}
                   </div>
 
-                  {/* Expanded: Action Logs */}
                   {selectedSession === session.id && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
@@ -412,10 +310,6 @@ export default function TelecallingDashboard() {
               );
             })
           )}
-        </TabsContent>
-        {/* Outbound Scheduling */}
-        <TabsContent value="outbound">
-          <OutboundScheduler />
         </TabsContent>
 
         {/* Analytics Charts */}
