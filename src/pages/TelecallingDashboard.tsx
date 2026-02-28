@@ -9,6 +9,7 @@ import {
 import ElevenLabsVoiceAgent from "@/components/telecalling/ElevenLabsVoiceAgent";
 import TTSPanel from "@/components/telecalling/TTSPanel";
 import STTPanel from "@/components/telecalling/STTPanel";
+import OutboundScheduler from "@/components/telecalling/OutboundScheduler";
 import CallAnalyticsCharts from "@/components/telecalling/CallAnalyticsCharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -154,6 +155,8 @@ export default function TelecallingDashboard() {
     return acc;
   }, {} as Record<string, number>);
 
+  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-webhook/incoming`;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -161,12 +164,33 @@ export default function TelecallingDashboard() {
           <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
             <Radio className="h-6 w-6 text-accent" /> Voice Intelligence
           </h1>
-          <p className="text-muted-foreground text-sm">AI-powered voice agent, TTS & STT powered by ElevenLabs</p>
+          <p className="text-muted-foreground text-sm">Twilio phone calls with ElevenLabs AI voice + in-browser agent</p>
         </div>
         <Button variant="outline" size="sm" onClick={fetchSessions}>
           <RefreshCw className="h-4 w-4" /> Refresh
         </Button>
       </div>
+
+      {/* Twilio Webhook Config - Admin Only */}
+      {isAdmin && (
+        <div className="bg-card border border-border rounded-xl p-4 shadow-card">
+          <h3 className="font-heading font-semibold text-sm text-card-foreground flex items-center gap-2 mb-2">
+            <Shield className="h-4 w-4 text-accent" /> Twilio Webhook Configuration
+          </h3>
+          <p className="text-xs text-muted-foreground mb-2">
+            Configure your Twilio phone number's voice webhook URL to:
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="bg-secondary px-3 py-2 rounded-lg text-xs text-foreground flex-1 truncate">
+              {webhookUrl}
+            </code>
+            <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(webhookUrl); toast.success("URL copied!"); }}>
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-2">IVR prompts use ElevenLabs AI voice instead of Polly</p>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -198,6 +222,7 @@ export default function TelecallingDashboard() {
           <TabsTrigger value="tts"><Volume2 className="h-3.5 w-3.5 mr-1" /> TTS</TabsTrigger>
           <TabsTrigger value="stt"><FileText className="h-3.5 w-3.5 mr-1" /> STT</TabsTrigger>
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
+          {isAdmin && <TabsTrigger value="outbound"><PhoneOutgoing className="h-3.5 w-3.5 mr-1" /> Outbound</TabsTrigger>}
           {isAdmin && <TabsTrigger value="analytics">Analytics</TabsTrigger>}
           {isAdmin && <TabsTrigger value="intents">Intents</TabsTrigger>}
         </TabsList>
@@ -215,6 +240,11 @@ export default function TelecallingDashboard() {
         {/* STT */}
         <TabsContent value="stt">
           <STTPanel />
+        </TabsContent>
+
+        {/* Outbound Scheduling */}
+        <TabsContent value="outbound">
+          <OutboundScheduler />
         </TabsContent>
 
         {/* Sessions */}
