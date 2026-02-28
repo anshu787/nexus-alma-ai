@@ -29,7 +29,20 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { tool_name, parameters } = body;
+    
+    // Support both direct calls and Vapi's tool call format
+    let tool_name: string;
+    let parameters: any;
+    
+    if (body.message?.type === "function-call" && body.message?.functionCall) {
+      // Vapi format
+      tool_name = body.message.functionCall.name;
+      parameters = body.message.functionCall.parameters || {};
+    } else {
+      // Direct format
+      tool_name = body.tool_name;
+      parameters = body.parameters || {};
+    }
 
     // ── AUTHENTICATE USER BY ACCESS CODE ──
     if (tool_name === "authenticate_user") {
