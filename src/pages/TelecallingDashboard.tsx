@@ -11,6 +11,7 @@ import TTSPanel from "@/components/telecalling/TTSPanel";
 import STTPanel from "@/components/telecalling/STTPanel";
 import OutboundScheduler from "@/components/telecalling/OutboundScheduler";
 import CallAnalyticsCharts from "@/components/telecalling/CallAnalyticsCharts";
+import AgentSetupGuide from "@/components/telecalling/AgentSetupGuide";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -191,6 +192,9 @@ export default function TelecallingDashboard() {
           <p className="text-[10px] text-muted-foreground mt-2">IVR prompts use ElevenLabs AI voice instead of Polly</p>
         </div>
       )}
+
+      {/* Agent Setup Guide */}
+      {isAdmin && <AgentSetupGuide />}
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
