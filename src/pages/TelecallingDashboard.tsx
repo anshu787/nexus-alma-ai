@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import {
   Phone, PhoneCall, PhoneOff, PhoneIncoming, PhoneOutgoing,
   Activity, Clock, Users, Shield, Loader2, Copy, RefreshCw,
   MessageSquare, UserCog, Calendar, Mic, BarChart3, CheckCircle2,
   AlertTriangle, Key, Send, Radio, Volume2, FileText
 } from "lucide-react";
-import ElevenLabsVoiceAgent from "@/components/telecalling/ElevenLabsVoiceAgent";
+
 
 import TTSPanel from "@/components/telecalling/TTSPanel";
 import STTPanel from "@/components/telecalling/STTPanel";
@@ -79,6 +80,7 @@ function formatDuration(seconds: number | null) {
 
 export default function TelecallingDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState<CallSession[]>([]);
   const [actionLogs, setActionLogs] = useState<CallActionLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -233,9 +235,18 @@ export default function TelecallingDashboard() {
           {isAdmin && <TabsTrigger value="intents">Intents</TabsTrigger>}
         </TabsList>
 
-        {/* AI Mentor Call - ElevenLabs Agent */}
+        {/* AI Mentor Call - Browser Native */}
         <TabsContent value="agent">
-          <ElevenLabsVoiceAgent />
+          <div className="bg-card border border-border rounded-xl p-8 shadow-card text-center space-y-4">
+            <Phone className="h-12 w-12 text-accent mx-auto" />
+            <h3 className="font-heading font-semibold text-lg text-card-foreground">AI Mentor Voice Assistant</h3>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              Start a browser-native voice conversation with the AI assistant. Uses WebRTC and built-in speech recognition — no external APIs required.
+            </p>
+            <Button className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={() => navigate("/ai-call")}>
+              <Phone className="h-4 w-4 mr-2" /> Open AI Call
+            </Button>
+          </div>
         </TabsContent>
         {/* TTS */}
         <TabsContent value="tts">

@@ -37,6 +37,7 @@ import AdminAnalyticsPage from "./pages/AdminAnalyticsPage";
 import MailingCampaignsPage from "./pages/MailingCampaignsPage";
 import SettingsPage from "./pages/SettingsPage";
 import TelecallingDashboard from "./pages/TelecallingDashboard";
+import AICallPage from "./pages/AICallPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -97,6 +98,7 @@ const AppRoutes = () => (
     <Route path="/dashboard/branding" element={<GuardedDashPage roles={["institution_admin"]}><InstitutionBranding /></GuardedDashPage>} />
     <Route path="/dashboard/admin" element={<GuardedDashPage roles={["super_admin"]}><SuperAdminDashboard /></GuardedDashPage>} />
     <Route path="/dashboard/telecalling" element={<GuardedDashPage roles={["super_admin", "institution_admin"]}><TelecallingDashboard /></GuardedDashPage>} />
+    <Route path="/ai-call" element={<ProtectedRoute><AICallPage /></ProtectedRoute>} />
 
     <Route path="*" element={<NotFound />} />
   </Routes>
