@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Heart, MessageCircle, Share2, MoreHorizontal, Send, Image, Smile,
-  TrendingUp, Calendar, Plus, X, ChevronDown, ChevronUp, Eye, Loader2
+  TrendingUp, Calendar, Plus, X, ChevronDown, ChevronUp, Eye, Loader2, Trash2, Shield
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -57,7 +58,7 @@ function timeAgo(d: string) {
   return `${Math.floor(s / 86400)}d`;
 }
 
-function CommentThread({ comment, onReply }: { comment: DbComment; onReply: (parentId: string, content: string) => void }) {
+function CommentThread({ comment, onReply, canModerate, onDelete }: { comment: DbComment; onReply: (parentId: string, content: string) => void; canModerate?: boolean; onDelete?: (commentId: string) => void }) {
   const [showReply, setShowReply] = useState(false);
   const [reply, setReply] = useState("");
   const [showReplies, setShowReplies] = useState(false);
@@ -70,9 +71,14 @@ function CommentThread({ comment, onReply }: { comment: DbComment; onReply: (par
           <AvatarFallback className="bg-accent/10 text-accent text-[10px] font-heading">{getInitials(name)}</AvatarFallback>
         </Avatar>
         <div className="flex-1 min-w-0">
-          <div className="bg-secondary rounded-lg px-3 py-2">
+          <div className="bg-secondary rounded-lg px-3 py-2 group relative">
             <span className="text-xs font-semibold text-card-foreground">{name}</span>
             <p className="text-xs text-card-foreground mt-0.5">{comment.content}</p>
+            {canModerate && onDelete && (
+              <button onClick={() => onDelete(comment.id)} className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10" title="Delete comment">
+                <Trash2 className="h-3 w-3 text-destructive" />
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-3 mt-1 px-1">
             <span className="text-[10px] text-muted-foreground">{timeAgo(comment.created_at)}</span>
@@ -95,7 +101,7 @@ function CommentThread({ comment, onReply }: { comment: DbComment; onReply: (par
             </button>
           )}
           {showReplies && comment.replies!.map((r) => (
-            <CommentThread key={r.id} comment={r} onReply={onReply} />
+            <CommentThread key={r.id} comment={r} onReply={onReply} canModerate={canModerate} onDelete={onDelete} />
           ))}
         </div>
       )}
@@ -114,6 +120,17 @@ export default function SocialFeedV2() {
   const [postComments, setPostComments] = useState<Record<string, DbComment[]>>({});
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+
+  const canModerate = userRoles.includes("moderator") || userRoles.includes("super_admin");
+
+  // Fetch user roles
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("user_roles").select("role").eq("user_id", user.id).then(({ data }) => {
+      setUserRoles(data?.map((r) => r.role) || []);
+    });
+  }, [user]);
 
   // Fetch posts with profiles
   const fetchPosts = async () => {
@@ -222,6 +239,20 @@ export default function SocialFeedV2() {
     fetchComments(postId);
   };
 
+  const deletePost = async (postId: string) => {
+    const { error } = await supabase.from("posts").delete().eq("id", postId);
+    if (error) { toast.error(error.message); return; }
+    setPosts((prev) => prev.filter((p) => p.id !== postId));
+    toast.success("Post deleted by moderator");
+  };
+
+  const deleteComment = async (postId: string, commentId: string) => {
+    const { error } = await supabase.from("comments").delete().eq("id", commentId);
+    if (error) { toast.error(error.message); return; }
+    fetchComments(postId);
+    toast.success("Comment deleted by moderator");
+  };
+
   const userInitials = user?.email?.substring(0, 2).toUpperCase() || "YO";
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-accent" /></div>;
@@ -303,6 +334,20 @@ export default function SocialFeedV2() {
                     <p className="text-xs text-muted-foreground">{role} • {timeAgo(post.created_at)}</p>
                   </div>
                 </div>
+                {(canModerate || post.user_id === user?.id) && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => deletePost(post.id)} className="text-destructive focus:text-destructive">
+                        <Trash2 className="h-4 w-4 mr-2" /> {canModerate && post.user_id !== user?.id ? "Delete (Moderator)" : "Delete"}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </div>
               <p className="text-sm text-card-foreground leading-relaxed mb-4">{post.content}</p>
               {post.image_url && <img src={post.image_url} alt="" className="rounded-lg mb-4 max-h-80 w-full object-cover" />}
@@ -319,7 +364,7 @@ export default function SocialFeedV2() {
               <AnimatePresence>
                 {showComments[post.id] && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-3 pt-3 border-t border-border">
-                    {comments.map((c) => <CommentThread key={c.id} comment={c} onReply={(pid, content) => addReply(post.id, pid, content)} />)}
+                    {comments.map((c) => <CommentThread key={c.id} comment={c} onReply={(pid, content) => addReply(post.id, pid, content)} canModerate={canModerate} onDelete={(commentId) => deleteComment(post.id, commentId)} />)}
                     <div className="flex gap-2 mt-2">
                       <input value={commentInputs[post.id] || ""} onChange={(e) => setCommentInputs((prev) => ({ ...prev, [post.id]: e.target.value }))}
                         onKeyDown={(e) => e.key === "Enter" && addComment(post.id)} placeholder="Write a comment..."
