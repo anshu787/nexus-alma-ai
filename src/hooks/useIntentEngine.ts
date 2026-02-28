@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { moderateContent, moderatePost } from "@/lib/contentModerator";
 
 export interface IntentResult {
   intent: string;
@@ -220,19 +221,30 @@ export function useIntentEngine() {
           body.parameters.sender_id = memory.userId;
         }
 
-        // Handle create_post locally (not in agent-tools)
+        // Handle create_post locally with AI moderation
         if (intent === "create_post") {
+          const modResult = moderatePost(params.content);
+          const finalContent = modResult.moderated ? modResult.content : params.content;
+
           const { error } = await supabase.from("posts").insert({
             user_id: memory.userId!,
-            content: params.content,
+            content: finalContent,
           });
           if (error) throw error;
-          return {
-            intent,
-            params,
-            response: `Your post has been published: "${params.content.substring(0, 60)}${params.content.length > 60 ? "..." : ""}"`,
-            success: true,
-          };
+
+          let responseText = `Your post has been published: "${finalContent.substring(0, 60)}${finalContent.length > 60 ? "..." : ""}"`;
+          if (modResult.moderated) {
+            responseText += ` ${modResult.note}`;
+          }
+          return { intent, params, response: responseText, success: true };
+        }
+
+        // Handle send_message with moderation
+        if (intent === "send_message" && params.message) {
+          const modResult = moderateContent(params.message);
+          if (modResult.isNegativeInstitutional) {
+            body.parameters.message = modResult.moderatedText;
+          }
         }
 
         const { data, error } = await supabase.functions.invoke("agent-tools", {
