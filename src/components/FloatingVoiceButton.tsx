@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Phone, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import VapiVoiceAssistant from "@/components/telecalling/VapiVoiceAssistant";
+import ElevenLabsVoiceAgent from "@/components/telecalling/ElevenLabsVoiceAgent";
 
 export default function FloatingVoiceButton() {
   const [open, setOpen] = useState(false);
@@ -46,7 +46,7 @@ export default function FloatingVoiceButton() {
               </Button>
             </div>
             <div className="p-4">
-              <VapiVoiceAssistant />
+              <ElevenLabsVoiceAgent />
             </div>
           </motion.div>
         )}

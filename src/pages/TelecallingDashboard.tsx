@@ -4,10 +4,10 @@ import {
   Phone, PhoneCall, PhoneOff, PhoneIncoming, PhoneOutgoing,
   Activity, Clock, Users, Shield, Loader2, Copy, RefreshCw,
   MessageSquare, UserCog, Calendar, Mic, BarChart3, CheckCircle2,
-  AlertTriangle, Key, Send, Radio, Volume2, FileText, Bot
+  AlertTriangle, Key, Send, Radio, Volume2, FileText
 } from "lucide-react";
 import ElevenLabsVoiceAgent from "@/components/telecalling/ElevenLabsVoiceAgent";
-import VapiVoiceAssistant from "@/components/telecalling/VapiVoiceAssistant";
+
 import TTSPanel from "@/components/telecalling/TTSPanel";
 import STTPanel from "@/components/telecalling/STTPanel";
 import OutboundScheduler from "@/components/telecalling/OutboundScheduler";
@@ -222,10 +222,9 @@ export default function TelecallingDashboard() {
         ))}
       </div>
 
-      <Tabs defaultValue="vapi" className="space-y-4">
+      <Tabs defaultValue="agent" className="space-y-4">
         <TabsList className="flex-wrap">
-          <TabsTrigger value="vapi"><Bot className="h-3.5 w-3.5 mr-1" /> AI Mentor Call</TabsTrigger>
-          <TabsTrigger value="agent"><Radio className="h-3.5 w-3.5 mr-1" /> ElevenLabs Agent</TabsTrigger>
+          <TabsTrigger value="agent"><Radio className="h-3.5 w-3.5 mr-1" /> AI Mentor Call</TabsTrigger>
           <TabsTrigger value="tts"><Volume2 className="h-3.5 w-3.5 mr-1" /> TTS</TabsTrigger>
           <TabsTrigger value="stt"><FileText className="h-3.5 w-3.5 mr-1" /> STT</TabsTrigger>
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
@@ -234,16 +233,10 @@ export default function TelecallingDashboard() {
           {isAdmin && <TabsTrigger value="intents">Intents</TabsTrigger>}
         </TabsList>
 
-        {/* Vapi AI Mentor Assistant */}
-        <TabsContent value="vapi">
-          <VapiVoiceAssistant />
-        </TabsContent>
-
-        {/* ElevenLabs Voice Agent */}
+        {/* AI Mentor Call - ElevenLabs Agent */}
         <TabsContent value="agent">
           <ElevenLabsVoiceAgent />
         </TabsContent>
-
         {/* TTS */}
         <TabsContent value="tts">
           <TTSPanel />
