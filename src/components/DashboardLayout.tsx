@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useBrowserNotifications } from "@/hooks/useBrowserNotifications";
+import FloatingVoiceButton from "@/components/FloatingVoiceButton";
 
 interface NavItem {
   icon: typeof Bell;
@@ -397,6 +398,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <main className="flex-1 overflow-y-auto p-6">
           {children}
         </main>
+        <FloatingVoiceButton />
       </div>
     </div>
   );
